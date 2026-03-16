@@ -1,0 +1,180 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — Elections{% endblock %}
+{% block nav_elections %}active{% endblock %}
+{% block page_title %}Elections{% endblock %}
+
+{% block admin_content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
+      Manage all elections — create, activate, close, and delete.
+    </p>
+  </div>
+  <a href="{% url 'admin_election_create' %}"
+     class="btn btn-primary"
+     style="background:#16a34a; border-color:#16a34a;
+            border-radius:10px; font-size:0.85rem; padding:8px 18px;">
+    <i class="fa fa-plus me-2"></i>New Election
+  </a>
+</div>
+
+<!-- ── Elections Table ── -->
+<div class="kura-table">
+  <table class="table table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Election Name</th>
+        <th>Status</th>
+        <th>Start Date</th>
+        <th>End Date</th>
+        <th>Positions</th>
+        <th>Votes</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for election in elections %}
+        <tr>
+          <td>
+            <div style="font-weight:600; font-size:0.88rem;
+                        color:#1e293b;">
+              {{ election.election_name }}
+            </div>
+            <div style="font-size:0.72rem; color:#94a3b8;">
+              Created {{ election.created_at|date:"d M Y" }}
+            </div>
+          </td>
+          <td>
+            <span class="badge-{{ election.status }}"
+                  style="font-size:0.72rem; padding:4px 12px;
+                         border-radius:10px; font-weight:500;">
+              {% if election.status == 'active' %}
+                <span style="width:6px; height:6px; border-radius:50%;
+                             background:#16a34a; display:inline-block;
+                             margin-right:4px;
+                             animation:pulse 1.5s infinite;"></span>
+              {% endif %}
+              {{ election.get_status_display }}
+            </span>
+          </td>
+          <td style="font-size:0.82rem;">
+            {{ election.start_date|date:"d M Y, H:i" }}
+          </td>
+          <td style="font-size:0.82rem;">
+            {{ election.end_date|date:"d M Y, H:i" }}
+          </td>
+          <td style="font-size:0.88rem; font-weight:600;
+                     color:#166534;">
+            {{ election.positions.count }}
+          </td>
+          <td style="font-size:0.88rem; font-weight:600;
+                     color:#166534;">
+            {{ election.total_votes }}
+          </td>
+          <td>
+            <div class="d-flex gap-1 flex-wrap">
+
+              <!-- Edit -->
+              <a href="{% url 'admin_election_edit' election.pk %}"
+                 class="btn btn-sm"
+                 style="background:#f0fdf4; color:#166534;
+                        border:1px solid #bbf7d0; border-radius:6px;
+                        padding:4px 10px; font-size:0.75rem;"
+                 title="Edit">
+                <i class="fa fa-edit"></i>
+              </a>
+
+              <!-- Activate -->
+              {% if election.status == 'inactive' %}
+                <a href="{% url 'admin_election_activate' election.pk %}"
+                   class="btn btn-sm"
+                   style="background:#f0fdf4; color:#16a34a;
+                          border:1px solid #bbf7d0; border-radius:6px;
+                          padding:4px 10px; font-size:0.75rem;"
+                   title="Activate"
+                   onclick="return confirm(
+                     'Activate {{ election.election_name }}? '
+                     + 'Students will be able to vote immediately.')">
+                  <i class="fa fa-play"></i>
+                </a>
+              {% endif %}
+
+              <!-- Close -->
+              {% if election.status == 'active' %}
+                <a href="{% url 'admin_election_close' election.pk %}"
+                   class="btn btn-sm"
+                   style="background:#fef2f2; color:#dc2626;
+                          border:1px solid #fecaca; border-radius:6px;
+                          padding:4px 10px; font-size:0.75rem;"
+                   title="Close"
+                   onclick="return confirm(
+                     'Close {{ election.election_name }}? '
+                     + 'Voting will stop immediately.')">
+                  <i class="fa fa-stop"></i>
+                </a>
+              {% endif %}
+
+              <!-- Results -->
+              {% if election.status != 'inactive' %}
+                <a href="{% url 'admin_live_results' election.pk %}"
+                   class="btn btn-sm"
+                   style="background:#fefce8; color:#854d0e;
+                          border:1px solid #fde68a; border-radius:6px;
+                          padding:4px 10px; font-size:0.75rem;"
+                   title="Results">
+                  <i class="fa fa-chart-bar"></i>
+                </a>
+              {% endif %}
+
+              <!-- Delete -->
+              {% if election.status == 'inactive' %}
+                <form method="POST"
+                      action="{% url 'admin_election_delete' election.pk %}"
+                      style="display:inline;"
+                      onsubmit="return confirm(
+                        'Delete {{ election.election_name }}? '
+                        + 'This cannot be undone.')">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="btn btn-sm"
+                          style="background:#fef2f2; color:#dc2626;
+                                 border:1px solid #fecaca;
+                                 border-radius:6px; padding:4px 10px;
+                                 font-size:0.75rem;"
+                          title="Delete">
+                    <i class="fa fa-trash"></i>
+                  </button>
+                </form>
+              {% endif %}
+
+            </div>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="7" class="text-center py-5"
+              style="color:#94a3b8;">
+            <i class="fa fa-inbox d-block mb-2"
+               style="font-size:2rem;"></i>
+            No elections found.
+            <a href="{% url 'admin_election_create' %}"
+               style="color:#16a34a;">
+              Create your first election
+            </a>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity:1; }
+    50%       { opacity:0.4; }
+  }
+</style>
+
+{% endblock %}

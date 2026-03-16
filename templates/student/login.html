@@ -1,0 +1,343 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}KuraVote — Login{% endblock %}
+
+{% block content %}
+<div class="login-shell">
+
+  <!-- ── Left Panel (hidden on mobile) ── -->
+  <div class="login-left d-none d-lg-flex">
+    <div class="login-left-inner">
+
+      <div style="font-family:'Sora',sans-serif; font-size:2.5rem;
+                  font-weight:700; color:#fff; margin-bottom:8px;">
+        Kura<span style="color:#eab308">Vote</span>
+      </div>
+      <div style="color:rgba(255,255,255,0.7); font-size:1rem;
+                  margin-bottom:40px; line-height:1.6;">
+        Digital School Election System
+      </div>
+
+      <!-- Features list -->
+      <div class="d-flex flex-column gap-3">
+
+        <div class="login-feature">
+          <div class="login-feature-icon">
+            <i class="fa fa-shield-alt"></i>
+          </div>
+          <div>
+            <div style="font-weight:600; color:#fff;
+                        font-size:0.9rem;">
+              Secure Voting
+            </div>
+            <div style="color:rgba(255,255,255,0.6);
+                        font-size:0.8rem;">
+              Every vote is encrypted and protected
+            </div>
+          </div>
+        </div>
+
+        <div class="login-feature">
+          <div class="login-feature-icon">
+            <i class="fa fa-check-double"></i>
+          </div>
+          <div>
+            <div style="font-weight:600; color:#fff;
+                        font-size:0.9rem;">
+              One Vote Per Student
+            </div>
+            <div style="color:rgba(255,255,255,0.6);
+                        font-size:0.8rem;">
+              Duplicate voting is completely prevented
+            </div>
+          </div>
+        </div>
+
+        <div class="login-feature">
+          <div class="login-feature-icon">
+            <i class="fa fa-chart-bar"></i>
+          </div>
+          <div>
+            <div style="font-weight:600; color:#fff;
+                        font-size:0.9rem;">
+              Live Results
+            </div>
+            <div style="color:rgba(255,255,255,0.6);
+                        font-size:0.8rem;">
+              Real-time vote counts as they come in
+            </div>
+          </div>
+        </div>
+
+        <div class="login-feature">
+          <div class="login-feature-icon">
+            <i class="fa fa-mobile-alt"></i>
+          </div>
+          <div>
+            <div style="font-weight:600; color:#fff;
+                        font-size:0.9rem;">
+              Mobile Friendly
+            </div>
+            <div style="color:rgba(255,255,255,0.6);
+                        font-size:0.8rem;">
+              Vote from any device, anywhere
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom note -->
+      <div style="margin-top:auto; padding-top:40px;
+                  font-size:0.75rem; color:rgba(255,255,255,0.35);">
+        &copy; {% now "Y" %} KuraVote — School Election System
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Right Panel (login form) ── -->
+  <div class="login-right">
+    <div class="login-form-wrap">
+
+      <!-- Mobile brand (shown only on mobile) -->
+      <div class="d-lg-none text-center mb-4">
+        <div style="font-family:'Sora',sans-serif; font-size:2rem;
+                    font-weight:700; color:#166534;">
+          Kura<span style="color:#eab308">Vote</span>
+        </div>
+        <div style="color:#94a3b8; font-size:0.82rem; margin-top:4px;">
+          Digital School Election System
+        </div>
+      </div>
+
+      <!-- Form card -->
+      <div class="login-card">
+
+        <!-- Header -->
+        <div class="mb-4">
+          <h4 style="font-family:'Sora',sans-serif; color:#166534;
+                     margin-bottom:4px; font-size:1.3rem;">
+            Student Login
+          </h4>
+          <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
+            Enter your admission number and password to vote.
+          </p>
+        </div>
+
+        <!-- Form -->
+        <form method="POST" novalidate id="login-form">
+          {% csrf_token %}
+
+          <!-- Admission Number -->
+          <div class="mb-3">
+            <label class="form-label"
+                   style="font-size:0.85rem; font-weight:500;
+                          color:#374151;">
+              <i class="fa fa-id-card me-1"
+                 style="color:#16a34a"></i>
+              Admission Number
+            </label>
+            {{ form.admission_number }}
+            {% if form.admission_number.errors %}
+              <div class="text-danger mt-1"
+                   style="font-size:0.78rem;">
+                <i class="fa fa-exclamation-circle me-1"></i>
+                {{ form.admission_number.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Password -->
+          <div class="mb-4">
+            <label class="form-label"
+                   style="font-size:0.85rem; font-weight:500;
+                          color:#374151;">
+              <i class="fa fa-lock me-1"
+                 style="color:#16a34a"></i>
+              Password
+            </label>
+            <div class="input-group">
+              {{ form.password }}
+              <button class="btn"
+                      type="button"
+                      id="toggle-pw"
+                      style="border:1px solid #d1fae5;
+                             background:#f0fdf4;
+                             color:#16a34a;">
+                <i class="fa fa-eye" id="eye-icon"></i>
+              </button>
+            </div>
+            {% if form.password.errors %}
+              <div class="text-danger mt-1"
+                   style="font-size:0.78rem;">
+                <i class="fa fa-exclamation-circle me-1"></i>
+                {{ form.password.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Submit -->
+          <button type="submit"
+                  id="login-btn"
+                  class="btn w-100 py-2"
+                  style="background:#16a34a; color:#fff;
+                         border:none; border-radius:10px;
+                         font-family:'Sora',sans-serif;
+                         font-size:0.95rem; font-weight:600;">
+            <i class="fa fa-sign-in-alt me-2"></i>
+            Login to Vote
+          </button>
+
+        </form>
+
+        <!-- Help note -->
+        <div style="margin-top:20px; padding:12px 14px;
+                    background:#f0fdf4; border-radius:10px;
+                    border:1px solid #d1fae5;">
+          <div style="font-size:0.78rem; color:#166534;
+                      display:flex; align-items:flex-start; gap:8px;">
+            <i class="fa fa-info-circle"
+               style="margin-top:1px; flex-shrink:0;"></i>
+            <span>
+              Your default password is your
+              <strong>admission number</strong>.
+              You will be asked to change it on your first login.
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<style>
+  /* ── Login Shell ── */
+  .login-shell {
+    display: flex;
+    min-height: 100vh;
+    background: #f0fdf4;
+  }
+
+  /* ── Left green panel ── */
+  .login-left {
+    width: 45%;
+    background: linear-gradient(160deg, #14532d 0%, #16a34a 100%);
+    padding: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .login-left-inner {
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .login-feature {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .login-feature-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #eab308;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  /* ── Right form panel ── */
+  .login-right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  .login-form-wrap {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .login-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 32px;
+    border: 1px solid #d1fae5;
+    box-shadow: 0 4px 24px rgba(22,163,74,0.06);
+  }
+
+  /* ── Mobile tweaks ── */
+  @media (max-width: 991px) {
+    .login-shell {
+      flex-direction: column;
+      justify-content: center;
+    }
+    .login-right {
+      padding: 24px 16px;
+    }
+    .login-card {
+      padding: 24px 20px;
+    }
+  }
+
+  /* ── Form field radius ── */
+  .login-card .form-control {
+    border-color: #d1fae5;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.92rem;
+  }
+
+  .login-card .form-control:focus {
+    border-color: #16a34a;
+    box-shadow: 0 0 0 3px rgba(22,163,74,0.12);
+  }
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* ── Show/hide password ── */
+  const toggleBtn = document.getElementById('toggle-pw');
+  const pwField   = document.querySelector('input[name="password"]');
+  const eyeIcon   = document.getElementById('eye-icon');
+
+  if (toggleBtn && pwField) {
+    toggleBtn.addEventListener('click', function () {
+      const show    = pwField.type === 'password';
+      pwField.type  = show ? 'text' : 'password';
+      eyeIcon.className = show ? 'fa fa-eye-slash' : 'fa fa-eye';
+    });
+  }
+
+  /* ── Spinner on submit ── */
+  const form     = document.getElementById('login-form');
+  const loginBtn = document.getElementById('login-btn');
+
+  if (form && loginBtn) {
+    form.addEventListener('submit', function () {
+      loginBtn.disabled   = true;
+      loginBtn.innerHTML  =
+        '<span class="spinner-border spinner-border-sm me-2">'
+        + '</span>Logging in...';
+    });
+  }
+</script>
+{% endblock %}

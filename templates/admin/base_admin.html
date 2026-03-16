@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="admin-wrapper">
+
+  <!-- ── Sidebar ── -->
+  <aside class="admin-sidebar">
+
+    <!-- Brand -->
+    <div class="sidebar-brand">
+      <div style="font-family:'Sora',sans-serif; font-weight:700;
+                  font-size:1.2rem; color:#fff; letter-spacing:-0.3px;">
+        Kura<span style="color:#eab308">Vote</span>
+      </div>
+      <div style="font-size:9px; text-transform:uppercase;
+                  letter-spacing:1.2px;
+                  color:rgba(255,255,255,0.35); margin-top:3px;">
+        Admin Panel
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sidebar-nav">
+
+      <div class="sidebar-section-label">Overview</div>
+      <a href="{% url 'admin_dashboard' %}"
+         class="sidebar-item {% block nav_dashboard %}{% endblock %}">
+        <i class="fa fa-th-large"></i>
+        <span>Dashboard</span>
+      </a>
+
+      <div class="sidebar-section-label">Election Management</div>
+      <a href="{% url 'admin_elections' %}"
+         class="sidebar-item {% block nav_elections %}{% endblock %}">
+        <i class="fa fa-vote-yea"></i>
+        <span>Elections</span>
+        {% if active_election %}
+          <span class="sidebar-badge green">Active</span>
+        {% endif %}
+      </a>
+      <a href="{% url 'admin_positions' %}"
+         class="sidebar-item {% block nav_positions %}{% endblock %}">
+        <i class="fa fa-list-ul"></i>
+        <span>Positions</span>
+      </a>
+      <a href="{% url 'admin_candidates' %}"
+         class="sidebar-item {% block nav_candidates %}{% endblock %}">
+        <i class="fa fa-users"></i>
+        <span>Candidates</span>
+      </a>
+
+      <div class="sidebar-section-label">Students</div>
+      <a href="{% url 'admin_students' %}"
+         class="sidebar-item {% block nav_students %}{% endblock %}">
+        <i class="fa fa-user-graduate"></i>
+        <span>Student List</span>
+      </a>
+      <a href="{% url 'admin_upload_csv' %}"
+         class="sidebar-item {% block nav_csv %}{% endblock %}">
+        <i class="fa fa-file-csv"></i>
+        <span>CSV Upload</span>
+      </a>
+
+      <div class="sidebar-section-label">Results</div>
+      {% if active_election %}
+        <a href="{% url 'admin_live_results' active_election.id %}"
+           class="sidebar-item {% block nav_results %}{% endblock %}">
+          <i class="fa fa-chart-bar"></i>
+          <span>Live Results</span>
+          <span class="sidebar-badge red">Live</span>
+        </a>
+      {% else %}
+        <span class="sidebar-item disabled">
+          <i class="fa fa-chart-bar"></i>
+          <span>Live Results</span>
+        </span>
+      {% endif %}
+
+      <a href="{% if active_election %}{% url 'admin_reports' active_election.id %}{% else %}#{% endif %}"
+         class="sidebar-item {% block nav_reports %}{% endblock %}
+                {% if not active_election %}disabled{% endif %}">
+        <i class="fa fa-file-alt"></i>
+        <span>Reports</span>
+      </a>
+
+      <div class="sidebar-section-label">System</div>
+      <a href="{% url 'admin_audit_log' %}"
+         class="sidebar-item {% block nav_audit %}{% endblock %}">
+        <i class="fa fa-shield-alt"></i>
+        <span>Audit Log</span>
+      </a>
+      <a href="{% url 'admin_settings' %}"
+         class="sidebar-item {% block nav_settings %}{% endblock %}">
+        <i class="fa fa-cog"></i>
+        <span>Settings</span>
+      </a>
+
+    </nav>
+
+    <!-- User info at bottom -->
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="sidebar-user-avatar">
+          {{ request.user.first_name|slice:":1"|upper }}{{ request.user.last_name|slice:":1"|upper }}
+        </div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name">
+          {{ request.user.get_full_name }}  
+          </div>
+          <div class="sidebar-user-role">Administrator</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:4px; padding:4px 12px 12px;">
+        <a href="/admin/"
+           class="sidebar-action-btn"
+           title="Django Admin">
+          <i class="fa fa-tools"></i>
+          Django Admin
+        </a>
+        <a href="{% url 'logout' %}"
+           class="sidebar-action-btn danger"
+           title="Logout">
+          <i class="fa fa-sign-out-alt"></i>
+        </a>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ── Main Area ── -->
+  <div class="admin-main-area">
+
+    <!-- Top Bar -->
+    <header class="admin-topbar">
+      <div class="topbar-left">
+        <div class="topbar-page-title">
+          {% block page_title %}Dashboard{% endblock %}
+        </div>
+        <div class="topbar-breadcrumb">
+          KuraVote Admin
+          <i class="fa fa-chevron-right"
+             style="font-size:9px; margin:0 4px;"></i>
+          {% block page_title_2 %}Dashboard{% endblock %}
+        </div>
+      </div>
+      <div class="topbar-right">
+  {% if active_election %}
+    <div class="topbar-election-badge">
+      <span class="live-dot"></span>
+      {{ active_election.election_name }} — Active
+    </div>
+  {% endif %}
+  <div class="topbar-date">
+    <i class="fa fa-calendar-alt me-1"></i>
+    {% now "l, d F Y" %}
+  </div>
+  <div class="topbar-date" id="live-clock">
+    <i class="fa fa-clock me-1"></i>
+    <span id="clock-time">--:--:--</span>
+  </div>
+</div>
+    </header>
+
+    <!-- Page Content -->
+    <main class="admin-page-content">
+      {% block admin_content %}{% endblock %}
+    </main>
+
+  </div>
+
+</div>
+
+{% block extra_js %}{% endblock %}
+<script>
+  function updateClock() {
+    const now  = new Date();
+    const h    = String(now.getHours()).padStart(2,'0');
+    const m    = String(now.getMinutes()).padStart(2,'0');
+    const s    = String(now.getSeconds()).padStart(2,'0');
+    const el   = document.getElementById('clock-time');
+    if (el) el.textContent = h + ':' + m + ':' + s;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+</script>
+{% endblock %}

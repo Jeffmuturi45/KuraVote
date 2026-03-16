@@ -1,0 +1,135 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — {{ action }} Candidate{% endblock %}
+{% block nav_candidates %}active{% endblock %}
+{% block page_title %}{{ action }} Candidate{% endblock %}
+
+{% block admin_content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="kura-card">
+
+      <div class="mb-4">
+        <h5 style="font-family:'Sora',sans-serif; color:#166534;
+                   margin-bottom:4px;">
+          {{ action }} Candidate
+        </h5>
+        <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
+          A candidate must be a registered student assigned
+          to a specific position.
+        </p>
+      </div>
+
+      <form method="POST" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        <div class="row g-3">
+
+          <div class="col-md-6">
+            <label class="form-label"
+                   style="font-size:0.85rem; font-weight:500;">
+              Student
+            </label>
+            {{ form.student }}
+            {% if form.student.errors %}
+              <div class="text-danger mt-1" style="font-size:0.78rem;">
+                {{ form.student.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label"
+                   style="font-size:0.85rem; font-weight:500;">
+              Position
+            </label>
+            {{ form.position }}
+            {% if form.position.errors %}
+              <div class="text-danger mt-1" style="font-size:0.78rem;">
+                {{ form.position.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="col-12">
+            <label class="form-label"
+                   style="font-size:0.85rem; font-weight:500;">
+              Manifesto
+              <span style="color:#94a3b8; font-weight:400;">
+                (optional — max 500 characters)
+              </span>
+            </label>
+            {{ form.manifesto }}
+            {% if form.manifesto.errors %}
+              <div class="text-danger mt-1" style="font-size:0.78rem;">
+                {{ form.manifesto.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="col-12">
+            <label class="form-label"
+                   style="font-size:0.85rem; font-weight:500;">
+              Candidate Photo
+              <span style="color:#94a3b8; font-weight:400;">
+                (optional — jpg/png, max 2MB)
+              </span>
+            </label>
+
+            {% if candidate and candidate.has_photo %}
+              <div class="mb-2 d-flex align-items-center gap-3">
+                <img src="{{ candidate.photo.url }}"
+                     style="width:60px; height:60px; border-radius:12px;
+                            object-fit:cover;">
+                <div style="font-size:0.78rem; color:#94a3b8;">
+                  Current photo. Upload a new one to replace it.
+                </div>
+              </div>
+            {% endif %}
+
+            {{ form.photo }}
+            {% if form.photo.errors %}
+              <div class="text-danger mt-1" style="font-size:0.78rem;">
+                {{ form.photo.errors.0 }}
+              </div>
+            {% endif %}
+
+            <div style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">
+              <i class="fa fa-info-circle me-1"></i>
+              If no photo is uploaded, the candidate's initials
+              will be shown automatically.
+            </div>
+          </div>
+
+        </div>
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 mt-3"
+               style="font-size:0.82rem;">
+            {{ form.non_field_errors.0 }}
+          </div>
+        {% endif %}
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit"
+                  class="btn btn-primary px-4"
+                  style="background:#16a34a; border-color:#16a34a;
+                         border-radius:10px;">
+            <i class="fa fa-save me-2"></i>
+            Save Candidate
+          </button>
+          <a href="{% url 'admin_candidates' %}"
+             class="btn"
+             style="border:1px solid #bbf7d0; color:#166534;
+                    border-radius:10px;">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

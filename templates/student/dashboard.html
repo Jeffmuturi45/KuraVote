@@ -1,0 +1,178 @@
+{% extends 'student/base_student.html' %}
+
+{% block title %}KuraVote — Dashboard{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block student_content %}
+<div class="px-3 pt-3">
+
+  <!-- ── Greeting ── -->
+  <div class="mb-4">
+    <h5 style="font-family:'Sora',sans-serif;
+               color:#166534; margin-bottom:2px;">
+      Hello, {{ request.user.first_name }} 👋
+    </h5>
+    <p class="text-muted" style="font-size:0.82rem; margin:0;">
+      Welcome to KuraVote — your voice matters.
+    </p>
+  </div>
+
+  {% if election %}
+
+    <!-- ── Active Election Banner ── -->
+    <div class="mb-4" style="background:linear-gradient(135deg,
+         #14532d 0%, #16a34a 100%); border-radius:16px;
+         padding:20px; color:#fff;">
+      <div style="font-size:0.72rem; text-transform:uppercase;
+                  letter-spacing:1px; opacity:0.7; margin-bottom:6px;
+                  display:flex; align-items:center; gap:6px;">
+        <span style="width:7px; height:7px; border-radius:50%;
+                     background:#4ade80; display:inline-block;
+                     animation: pulse 1.5s infinite;"></span>
+        Election Active
+      </div>
+      <div style="font-family:'Sora',sans-serif; font-size:1.1rem;
+                  font-weight:700; margin-bottom:12px;">
+        {{ election.election_name }}
+      </div>
+
+      <!-- Progress -->
+      <div style="font-size:0.75rem; opacity:0.8; margin-bottom:6px;
+                  display:flex; justify-content:space-between;">
+        <span>Your voting progress</span>
+        <span>{{ votes_cast }} of {{ total_positions }} positions</span>
+      </div>
+      <div style="height:6px; background:rgba(255,255,255,0.2);
+                  border-radius:3px; overflow:hidden;">
+        <div style="height:100%; border-radius:3px;
+                    background:#eab308; transition:width 0.5s;
+                    width:{% if total_positions > 0 %}
+                    {{ votes_cast|floatformat:0 }}0%
+                    {% else %}0%{% endif %}">
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Positions Status ── -->
+    <div class="mb-4">
+      <div style="font-size:0.78rem; font-weight:600;
+                  color:#166534; text-transform:uppercase;
+                  letter-spacing:0.5px; margin-bottom:12px;">
+        Positions
+      </div>
+
+      <div class="d-flex flex-column gap-2">
+        {% for position in election.positions.all %}
+          <div style="background:#fff; border-radius:12px;
+                      padding:14px 16px; border:1.5px solid
+                      {% if position.id in voted_positions %}
+                      #86efac{% else %}#e2e8f0{% endif %};
+                      display:flex; align-items:center;
+                      justify-content:space-between;">
+
+            <div class="d-flex align-items-center gap-3">
+              <div style="width:38px; height:38px; border-radius:10px;
+                          background:{% if position.id in voted_positions %}
+                          #f0fdf4{% else %}#f8fafc{% endif %};
+                          display:flex; align-items:center;
+                          justify-content:center;">
+                <i class="fa fa-{% if position.id in voted_positions %}
+                   check-circle{% else %}circle{% endif %}"
+                   style="color:{% if position.id in voted_positions %}
+                   #16a34a{% else %}#cbd5e1{% endif %};
+                   font-size:1rem;"></i>
+              </div>
+              <div>
+                <div style="font-size:0.9rem; font-weight:600;
+                            color:#1e293b;">
+                  {{ position.position_name }}
+                </div>
+                <div style="font-size:0.72rem; color:#94a3b8;">
+                  {{ position.total_candidates }} candidate{{ position.total_candidates|pluralize }}
+                </div>
+              </div>
+            </div>
+
+            {% if position.id in voted_positions %}
+              <span style="font-size:0.72rem; background:#f0fdf4;
+                           color:#166534; border:1px solid #86efac;
+                           border-radius:10px; padding:2px 10px;
+                           font-weight:500;">
+                Voted
+              </span>
+            {% else %}
+              <a href="{% url 'ballot' %}"
+                 style="font-size:0.72rem; background:#16a34a;
+                        color:#fff; border-radius:10px;
+                        padding:4px 12px; text-decoration:none;
+                        font-weight:500;">
+                Vote
+              </a>
+            {% endif %}
+
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- ── Quick Actions ── -->
+    <div class="row g-3 mb-4">
+      <div class="col-6">
+        <a href="{% url 'ballot' %}"
+           style="display:block; background:#fff;
+                  border:1.5px solid #bbf7d0; border-radius:14px;
+                  padding:16px; text-align:center;
+                  text-decoration:none;">
+          <i class="fa fa-vote-yea"
+             style="font-size:1.5rem; color:#16a34a;
+                    display:block; margin-bottom:6px;"></i>
+          <div style="font-size:0.82rem; font-weight:600;
+                      color:#166534;">Cast Vote</div>
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'student_results' %}"
+           style="display:block; background:#fff;
+                  border:1.5px solid #bbf7d0; border-radius:14px;
+                  padding:16px; text-align:center;
+                  text-decoration:none;">
+          <i class="fa fa-chart-bar"
+             style="font-size:1.5rem; color:#eab308;
+                    display:block; margin-bottom:6px;"></i>
+          <div style="font-size:0.82rem; font-weight:600;
+                      color:#166534;">View Results</div>
+        </a>
+      </div>
+    </div>
+
+  {% else %}
+
+    <!-- ── No Active Election ── -->
+    <div style="text-align:center; padding:40px 20px;">
+      <div style="width:72px; height:72px; border-radius:50%;
+                  background:#f0fdf4; display:flex;
+                  align-items:center; justify-content:center;
+                  margin:0 auto 16px;">
+        <i class="fa fa-calendar-times"
+           style="font-size:1.8rem; color:#86efac;"></i>
+      </div>
+      <h6 style="font-family:'Sora',sans-serif; color:#166534;">
+        No Active Election
+      </h6>
+      <p class="text-muted" style="font-size:0.82rem;">
+        There is no election running at the moment.
+        Check back later or contact your administrator.
+      </p>
+    </div>
+
+  {% endif %}
+
+</div>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+</style>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — Positions{% endblock %}
+{% block nav_positions %}active{% endblock %}
+{% block page_title %}Positions{% endblock %}
+
+{% block admin_content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
+    Manage election positions — President, Secretary, Treasurer etc.
+  </p>
+  <a href="{% url 'admin_position_create' %}"
+     class="btn btn-primary"
+     style="background:#16a34a; border-color:#16a34a;
+            border-radius:10px; font-size:0.85rem; padding:8px 18px;">
+    <i class="fa fa-plus me-2"></i>New Position
+  </a>
+</div>
+
+<div class="kura-table">
+  <table class="table table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Position</th>
+        <th>Election</th>
+        <th>Max Votes</th>
+        <th>Candidates</th>
+        <th>Votes Cast</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for position in positions %}
+        <tr>
+          <td>
+            <div style="font-weight:600; font-size:0.88rem;
+                        color:#1e293b;">
+              {{ position.position_name }}
+            </div>
+          </td>
+          <td>
+            <span style="font-size:0.8rem; color:#166534;
+                         background:#f0fdf4; padding:3px 10px;
+                         border-radius:8px; border:1px solid #bbf7d0;">
+              {{ position.election.election_name }}
+            </span>
+          </td>
+          <td style="font-size:0.85rem;">
+            {{ position.max_votes }}
+          </td>
+          <td style="font-size:0.88rem; font-weight:600;
+                     color:#166534;">
+            {{ position.total_candidates }}
+          </td>
+          <td style="font-size:0.88rem; font-weight:600;
+                     color:#166534;">
+            {{ position.total_votes }}
+          </td>
+          <td>
+            <div class="d-flex gap-1">
+              <a href="{% url 'admin_position_edit' position.pk %}"
+                 class="btn btn-sm"
+                 style="background:#f0fdf4; color:#166534;
+                        border:1px solid #bbf7d0; border-radius:6px;
+                        padding:4px 10px; font-size:0.75rem;">
+                <i class="fa fa-edit"></i>
+              </a>
+              <form method="POST"
+                    action="{% url 'admin_position_delete' position.pk %}"
+                    style="display:inline;"
+                    onsubmit="return confirm(
+                      'Delete {{ position.position_name }}?')">
+                {% csrf_token %}
+                <button type="submit"
+                        class="btn btn-sm"
+                        style="background:#fef2f2; color:#dc2626;
+                               border:1px solid #fecaca;
+                               border-radius:6px; padding:4px 10px;
+                               font-size:0.75rem;">
+                  <i class="fa fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="6" class="text-center py-5"
+              style="color:#94a3b8;">
+            <i class="fa fa-inbox d-block mb-2"
+               style="font-size:2rem;"></i>
+            No positions found.
+            <a href="{% url 'admin_position_create' %}"
+               style="color:#16a34a;">
+              Add your first position
+            </a>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

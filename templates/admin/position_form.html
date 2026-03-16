@@ -1,0 +1,97 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — {{ action }} Position{% endblock %}
+{% block nav_positions %}active{% endblock %}
+{% block page_title %}{{ action }} Position{% endblock %}
+
+{% block admin_content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="kura-card">
+
+      <div class="mb-4">
+        <h5 style="font-family:'Sora',sans-serif; color:#166534;
+                   margin-bottom:4px;">
+          {{ action }} Position
+        </h5>
+        <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
+          Positions are linked to a specific election.
+        </p>
+      </div>
+
+      <form method="POST" novalidate>
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label class="form-label"
+                 style="font-size:0.85rem; font-weight:500;">
+            Election
+          </label>
+          {{ form.election }}
+          {% if form.election.errors %}
+            <div class="text-danger mt-1" style="font-size:0.78rem;">
+              {{ form.election.errors.0 }}
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"
+                 style="font-size:0.85rem; font-weight:500;">
+            Position Name
+          </label>
+          {{ form.position_name }}
+          {% if form.position_name.errors %}
+            <div class="text-danger mt-1" style="font-size:0.78rem;">
+              {{ form.position_name.errors.0 }}
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label"
+                 style="font-size:0.85rem; font-weight:500;">
+            Max Votes Allowed
+          </label>
+          {{ form.max_votes }}
+          <div style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">
+            <i class="fa fa-info-circle me-1"></i>
+            How many candidates a student can vote for in this position.
+            Usually 1.
+          </div>
+          {% if form.max_votes.errors %}
+            <div class="text-danger mt-1" style="font-size:0.78rem;">
+              {{ form.max_votes.errors.0 }}
+            </div>
+          {% endif %}
+        </div>
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 mb-3"
+               style="font-size:0.82rem;">
+            {{ form.non_field_errors.0 }}
+          </div>
+        {% endif %}
+
+        <div class="d-flex gap-2">
+          <button type="submit"
+                  class="btn btn-primary px-4"
+                  style="background:#16a34a; border-color:#16a34a;
+                         border-radius:10px;">
+            <i class="fa fa-save me-2"></i>Save Position
+          </button>
+          <a href="{% url 'admin_positions' %}"
+             class="btn"
+             style="border:1px solid #bbf7d0; color:#166634;
+                    border-radius:10px;">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,318 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — Dashboard{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_title_2 %}Dashboard{% endblock %}
+
+{% block admin_content %}
+
+<!-- ── Stat Cards ── -->
+<div class="row g-3 mb-4">
+  <div class="col-xl-3 col-md-6">
+    <div class="stat-card">
+      <div class="stat-label">
+        <i class="fa fa-user-graduate"
+           style="color:#16a34a"></i>
+        Total Students
+      </div>
+      <div class="stat-value">{{ total_students }}</div>
+      <div class="stat-sub">registered voters</div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="stat-card">
+      <div class="stat-label">
+        <i class="fa fa-vote-yea"
+           style="color:#16a34a"></i>
+        Total Elections
+      </div>
+      <div class="stat-value">{{ total_elections }}</div>
+      <div class="stat-sub">all time</div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="stat-card">
+      <div class="stat-label">
+        <i class="fa fa-users"
+           style="color:#16a34a"></i>
+        Total Candidates
+      </div>
+      <div class="stat-value">{{ total_candidates }}</div>
+      <div class="stat-sub">across all elections</div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="stat-card">
+      <div class="stat-label">
+        <i class="fa fa-chart-pie"
+           style="color:#16a34a"></i>
+        Voter Turnout
+      </div>
+      <div class="stat-value"
+           style="color:{% if turnout > 50 %}#16a34a
+                  {% elif turnout > 0 %}#eab308
+                  {% else %}#94a3b8{% endif %}">
+        {{ turnout }}%
+      </div>
+      <div style="height:5px; background:#d1fae5;
+                  border-radius:3px; margin-top:8px; overflow:hidden;">
+        <div style="height:100%; background:#16a34a; width:{{ turnout }}%;
+                    border-radius:3px; transition:width 0.5s;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Active Election Banner / No Election ── -->
+{% if active_election %}
+<div class="mb-4"
+     style="background:linear-gradient(135deg, #14532d 0%, #166534 60%, #16a34a 100%);
+            border-radius:16px; padding:28px 32px; color:#fff;
+            display:flex; align-items:center;
+            justify-content:space-between; gap:24px;">
+  <div style="flex:1; min-width:0;">
+    <div style="display:flex; align-items:center; gap:8px;
+                margin-bottom:8px;">
+      <span class="live-dot"></span>
+      <span style="font-size:11px; text-transform:uppercase;
+                   letter-spacing:1px; opacity:0.7;">
+        Election Active
+      </span>
+    </div>
+    <div style="font-family:'Sora',sans-serif; font-size:1.3rem;
+                font-weight:700; margin-bottom:12px;
+                white-space:nowrap; overflow:hidden;
+                text-overflow:ellipsis;">
+      {{ active_election.election_name }}
+    </div>
+    <div style="display:flex; gap:28px; flex-wrap:wrap;">
+      <div style="font-size:13px; opacity:0.85;">
+        <i class="fa fa-users me-1"></i>
+        {{ voters_count }} of {{ total_students }} students voted
+      </div>
+      <div style="font-size:13px; opacity:0.85;">
+        <i class="fa fa-check-circle me-1"></i>
+        {{ total_votes }} total votes cast
+      </div>
+      <div style="font-size:13px; opacity:0.85;">
+        <i class="fa fa-chart-pie me-1"></i>
+        {{ turnout }}% turnout
+      </div>
+    </div>
+  </div>
+  <div style="display:flex; gap:10px; flex-shrink:0;">
+    <a href="{% url 'admin_live_results' active_election.id %}"
+       style="display:inline-flex; align-items:center; gap:7px;
+              background:#eab308; color:#1a1a1a; border:none;
+              border-radius:10px; padding:10px 20px;
+              font-size:13px; font-weight:700;
+              text-decoration:none; transition:background 0.15s;"
+       onmouseover="this.style.background='#ca8a04'"
+       onmouseout="this.style.background='#eab308'">
+      <i class="fa fa-chart-bar"></i>
+      Live Results
+    </a>
+    <a href="{% url 'admin_election_close' active_election.id %}"
+       style="display:inline-flex; align-items:center; gap:7px;
+              background:rgba(255,255,255,0.12); color:#fff;
+              border:1px solid rgba(255,255,255,0.25);
+              border-radius:10px; padding:10px 20px;
+              font-size:13px; font-weight:500;
+              text-decoration:none; transition:all 0.15s;"
+       onclick="return confirm(
+         'Close {{ active_election.election_name }}?\n'
+         + 'Voting will stop immediately.')"
+       onmouseover="this.style.background='rgba(255,255,255,0.2)'"
+       onmouseout="this.style.background='rgba(255,255,255,0.12)'">
+      <i class="fa fa-stop-circle"></i>
+      Close Election
+    </a>
+  </div>
+</div>
+{% else %}
+<div class="mb-4"
+     style="background:#fff; border:2px dashed #bbf7d0;
+            border-radius:16px; padding:32px;
+            text-align:center;">
+  <i class="fa fa-calendar-plus"
+     style="font-size:2.2rem; color:#86efac;
+            display:block; margin-bottom:12px;"></i>
+  <div style="font-family:'Sora',sans-serif; font-weight:700;
+              color:#166534; font-size:1rem; margin-bottom:6px;">
+    No Active Election
+  </div>
+  <p style="font-size:13px; color:#94a3b8; margin-bottom:18px;">
+    Create and activate an election to start receiving votes.
+  </p>
+  <a href="{% url 'admin_election_create' %}" class="btn-kura">
+    <i class="fa fa-plus"></i>
+    Create Election
+  </a>
+</div>
+{% endif %}
+
+<!-- ── Two Column Layout ── -->
+<div class="row g-4">
+
+  <!-- Quick Actions -->
+  <div class="col-xl-4 col-lg-5">
+    <div style="font-family:'Sora',sans-serif; font-size:13px;
+                font-weight:700; color:#166534; text-transform:uppercase;
+                letter-spacing:0.5px; margin-bottom:14px;">
+      Quick Actions
+    </div>
+    <div class="row g-3">
+      <div class="col-6">
+        <a href="{% url 'admin_upload_csv' %}"
+           class="quick-action-card">
+          <i class="fa fa-file-csv"></i>
+          <span>Upload CSV</span>
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'admin_election_create' %}"
+           class="quick-action-card">
+          <i class="fa fa-vote-yea"></i>
+          <span>New Election</span>
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'admin_position_create' %}"
+           class="quick-action-card">
+          <i class="fa fa-list-ul"></i>
+          <span>Add Position</span>
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'admin_candidate_create' %}"
+           class="quick-action-card">
+          <i class="fa fa-user-plus"></i>
+          <span>Add Candidate</span>
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'admin_students' %}"
+           class="quick-action-card">
+          <i class="fa fa-user-graduate"></i>
+          <span>View Students</span>
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'admin_audit_log' %}"
+           class="quick-action-card">
+          <i class="fa fa-shield-alt"></i>
+          <span>Audit Log</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Elections -->
+  <div class="col-xl-8 col-lg-7">
+    <div style="font-family:'Sora',sans-serif; font-size:13px;
+                font-weight:700; color:#166534; text-transform:uppercase;
+                letter-spacing:0.5px; margin-bottom:14px;">
+      Recent Elections
+    </div>
+
+    <div class="kura-table">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Election</th>
+            <th>Status</th>
+            <th>Positions</th>
+            <th>Votes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for election in recent_elections %}
+            <tr>
+              <td>
+                <div style="font-weight:600; font-size:13px;
+                            color:#1e293b;">
+                  {{ election.election_name }}
+                </div>
+                <div style="font-size:11px; color:#94a3b8;">
+                  {{ election.start_date|date:"d M Y" }}
+                  →
+                  {{ election.end_date|date:"d M Y" }}
+                </div>
+              </td>
+              <td>
+                <span class="badge-{{ election.status }}">
+                  {% if election.status == 'active' %}
+                    <span class="live-dot"
+                          style="width:6px; height:6px;"></span>
+                  {% endif %}
+                  {{ election.get_status_display }}
+                </span>
+              </td>
+              <td style="font-size:13px; font-weight:600;
+                         color:#166534;">
+                {{ election.positions.count }}
+              </td>
+              <td style="font-size:13px; font-weight:600;
+                         color:#166534;">
+                {{ election.total_votes }}
+              </td>
+              <td>
+                <div style="display:flex; gap:5px;">
+                  <a href="{% url 'admin_election_edit' election.pk %}"
+                     class="tbl-btn tbl-btn-edit"
+                     title="Edit">
+                    <i class="fa fa-edit"></i>
+                  </a>
+                  {% if election.status != 'inactive' %}
+                    <a href="{% url 'admin_live_results' election.pk %}"
+                       class="tbl-btn tbl-btn-info"
+                       title="Results">
+                      <i class="fa fa-chart-bar"></i>
+                    </a>
+                  {% endif %}
+                  {% if election.status == 'inactive' %}
+                    <a href="{% url 'admin_election_activate' election.pk %}"
+                       class="tbl-btn tbl-btn-success"
+                       title="Activate"
+                       onclick="return confirm(
+                         'Activate {{ election.election_name }}?')">
+                      <i class="fa fa-play"></i>
+                    </a>
+                  {% endif %}
+                  {% if election.status == 'active' %}
+                    <a href="{% url 'admin_election_close' election.pk %}"
+                       class="tbl-btn tbl-btn-danger"
+                       title="Close"
+                       onclick="return confirm(
+                         'Close {{ election.election_name }}?')">
+                      <i class="fa fa-stop"></i>
+                    </a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <i class="fa fa-inbox"></i>
+                  <p>No elections yet.</p>
+                  <a href="{% url 'admin_election_create' %}"
+                     class="btn-kura">
+                    <i class="fa fa-plus"></i>
+                    Create First Election
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — {{ action }} Election{% endblock %}
+{% block nav_elections %}active{% endblock %}
+{% block page_title %}{{ action }} Election{% endblock %}
+
+{% block admin_content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="kura-card">
+
+      <div class="mb-4">
+        <h5 style="font-family:'Sora',sans-serif; color:#166534;
+                   margin-bottom:4px;">
+          {{ action }} Election
+        </h5>
+        <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
+          {% if action == 'Create' %}
+            Fill in the details to create a new election.
+          {% else %}
+            Update the election details below.
+          {% endif %}
+        </p>
+      </div>
+
+      <form method="POST" novalidate>
+        {% csrf_token %}
+
+        <!-- Election Name -->
+        <div class="mb-3">
+          <label class="form-label"
+                 style="font-size:0.85rem; font-weight:500;">
+            Election Name
+          </label>
+          {{ form.election_name }}
+          {% if form.election_name.errors %}
+            <div class="text-danger mt-1" style="font-size:0.78rem;">
+              {{ form.election_name.errors.0 }}
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Dates -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label"
+                   style="font-size:0.85rem; font-weight:500;">
+              <i class="fa fa-calendar-alt me-1"
+                 style="color:#16a34a;"></i>
+              Start Date & Time
+            </label>
+            {{ form.start_date }}
+            {% if form.start_date.errors %}
+              <div class="text-danger mt-1" style="font-size:0.78rem;">
+                {{ form.start_date.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label"
+                   style="font-size:0.85rem; font-weight:500;">
+              <i class="fa fa-calendar-check me-1"
+                 style="color:#16a34a;"></i>
+              End Date & Time
+            </label>
+            {{ form.end_date }}
+            {% if form.end_date.errors %}
+              <div class="text-danger mt-1" style="font-size:0.78rem;">
+                {{ form.end_date.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Status -->
+        <div class="mb-4">
+          <label class="form-label"
+                 style="font-size:0.85rem; font-weight:500;">
+            Status
+          </label>
+          {{ form.status }}
+          <div style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">
+            <i class="fa fa-info-circle me-1"></i>
+            Only one election can be active at a time.
+          </div>
+          {% if form.status.errors %}
+            <div class="text-danger mt-1" style="font-size:0.78rem;">
+              {{ form.status.errors.0 }}
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Non-field errors -->
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 mb-3"
+               style="font-size:0.82rem;">
+            <i class="fa fa-exclamation-circle me-1"></i>
+            {{ form.non_field_errors.0 }}
+          </div>
+        {% endif %}
+
+        <!-- Buttons -->
+        <div class="d-flex gap-2">
+          <button type="submit"
+                  class="btn btn-primary px-4"
+                  style="background:#16a34a; border-color:#16a34a;
+                         border-radius:10px;">
+            <i class="fa fa-save me-2"></i>
+            Save Election
+          </button>
+          <a href="{% url 'admin_elections' %}"
+             class="btn"
+             style="border:1px solid #bbf7d0; color:#166534;
+                    border-radius:10px;">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

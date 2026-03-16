@@ -1,0 +1,64 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — Delete Position{% endblock %}
+{% block nav_positions %}active{% endblock %}
+{% block page_title %}Delete Position{% endblock %}
+
+{% block admin_content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-5">
+    <div class="kura-card text-center">
+
+      <div style="width:64px; height:64px; border-radius:50%;
+                  background:#fef2f2; display:flex;
+                  align-items:center; justify-content:center;
+                  margin:0 auto 16px;">
+        <i class="fa fa-exclamation-triangle"
+           style="font-size:1.6rem; color:#dc2626;"></i>
+      </div>
+
+      <h5 style="font-family:'Sora',sans-serif; color:#dc2626;
+                 margin-bottom:8px;">
+        Delete Position
+      </h5>
+      <p style="color:#64748b; font-size:0.88rem; margin-bottom:4px;">
+        You are about to permanently delete:
+      </p>
+      <p style="font-weight:700; color:#1e293b; font-size:1rem;
+                margin-bottom:20px;">
+        "{{ position.position_name }}"
+      </p>
+
+      <div style="background:#fef2f2; border-radius:10px;
+                  padding:12px; margin-bottom:24px;
+                  font-size:0.8rem; color:#991b1b;">
+        <i class="fa fa-exclamation-circle me-1"></i>
+        All candidates and votes for this position will also
+        be deleted permanently.
+      </div>
+
+      <div class="d-flex gap-2 justify-content-center">
+        <form method="POST">
+          {% csrf_token %}
+          <button type="submit"
+                  class="btn"
+                  style="background:#dc2626; color:#fff; border:none;
+                         border-radius:10px; padding:9px 24px;
+                         font-weight:600;">
+            <i class="fa fa-trash me-2"></i>Yes, Delete
+          </button>
+        </form>
+        <a href="{% url 'admin_positions' %}"
+           class="btn"
+           style="border:1px solid #bbf7d0; color:#166534;
+                  border-radius:10px; padding:9px 24px;">
+          Cancel
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}

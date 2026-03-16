@@ -1,0 +1,346 @@
+{% extends 'admin/base_admin.html' %}
+{% load static %}
+
+{% block title %}KuraVote — Live Results{% endblock %}
+{% block nav_results %}active{% endblock %}
+{% block page_title %}Live Results{% endblock %}
+{% block page_title_2 %}Live Results{% endblock %}
+
+{% block admin_content %}
+
+<!-- Header -->
+<div class="action-bar mb-4">
+  <div>
+    <div class="section-title mb-1">
+      <span class="live-dot me-2"></span>
+      {{ election.election_name }}
+    </div>
+    <div class="section-sub">
+      Results update automatically every 5 seconds
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'admin_reports' election.id %}"
+       class="btn-kura-outline">
+      <i class="fa fa-file-alt"></i>
+      Full Report
+    </a>
+    {% if election.status == 'active' %}
+      <a href="{% url 'admin_election_close' election.id %}"
+         class="btn-kura"
+         style="background:#dc2626;"
+         onclick="return confirm('Close this election?')">
+        <i class="fa fa-stop-circle"></i>
+        Close Election
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="stat-card">
+      <div class="stat-label">
+        <i class="fa fa-check-circle" style="color:#16a34a;"></i>
+        Total Votes
+      </div>
+      <div class="stat-value" id="stat-total-votes">
+        {{ election.total_votes }}
+      </div>
+      <div class="stat-sub">across all positions</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card">
+      <div class="stat-label">
+        <i class="fa fa-users" style="color:#16a34a;"></i>
+        Students Voted
+      </div>
+      <div class="stat-value" id="stat-voters">
+        {{ voters_count }}
+      </div>
+      <div class="stat-sub">of {{ total_students }} registered</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card">
+      <div class="stat-label">
+        <i class="fa fa-chart-pie" style="color:#16a34a;"></i>
+        Turnout
+      </div>
+      <div class="stat-value" id="stat-turnout"
+           style="color:#16a34a;">
+        {{ turnout }}%
+      </div>
+      <div style="height:5px; background:#d1fae5; border-radius:3px;
+                  margin-top:8px; overflow:hidden;">
+        <div id="turnout-bar"
+             style="height:100%; background:#16a34a; border-radius:3px;
+                    width:{{ turnout }}%; transition:width 0.5s;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card">
+      <div class="stat-label">
+        <i class="fa fa-list-ul" style="color:#16a34a;"></i>
+        Positions
+      </div>
+      <div class="stat-value">{{ positions.count }}</div>
+      <div class="stat-sub" id="last-updated">
+        Updating...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Position Tabs -->
+<div style="background:#fff; border:1px solid var(--border);
+            border-radius:12px; margin-bottom:20px;
+            overflow:hidden;">
+  <div style="display:flex; overflow-x:auto;
+              scrollbar-width:none; border-bottom:1px solid var(--border);">
+    {% for position in positions %}
+      <button onclick="switchPosition({{ position.id }}, this)"
+              id="tab-{{ position.id }}"
+              class="pos-result-tab
+              {% if forloop.first %}active{% endif %}"
+              style="flex-shrink:0; padding:12px 20px;
+                     font-size:13px; font-weight:500;
+                     border:none; background:none; cursor:pointer;
+                     border-bottom:2.5px solid
+                     {% if forloop.first %}#16a34a{% else %}transparent{% endif %};
+                     color:{% if forloop.first %}#166534
+                     {% else %}#94a3b8{% endif %};
+                     transition:all 0.15s; white-space:nowrap;">
+        {{ position.position_name }}
+        <span style="font-size:11px; background:#f0fdf4;
+                     color:#16a34a; padding:1px 7px;
+                     border-radius:8px; margin-left:4px;">
+          {{ position.total_votes }}
+        </span>
+      </button>
+    {% endfor %}
+  </div>
+
+  <!-- Bar Charts per position -->
+  <div style="padding:24px;">
+    {% for position in positions %}
+      <div id="panel-{{ position.id }}"
+           class="result-panel"
+           style="display:{% if forloop.first %}block{% else %}none{% endif %};">
+
+        <div class="row align-items-center">
+
+          <!-- Bar chart -->
+          <div class="col-lg-8">
+            {% for candidate in position.candidates.all %}
+              <div class="d-flex align-items-center gap-3 mb-3"
+                   id="bar-{{ candidate.id }}">
+                <!-- Avatar -->
+                {% if candidate.has_photo %}
+                  <img src="{{ candidate.photo.url }}"
+                       style="width:38px; height:38px; border-radius:9px;
+                              object-fit:cover; flex-shrink:0;">
+                {% else %}
+                  <div style="width:38px; height:38px; border-radius:9px;
+                              background:{{ candidate.get_avatar_color }};
+                              display:flex; align-items:center;
+                              justify-content:center; color:#fff;
+                              font-family:'Sora',sans-serif;
+                              font-weight:700; font-size:12px;
+                              flex-shrink:0;">
+                    {{ candidate.get_initials }}
+                  </div>
+                {% endif %}
+                <!-- Name -->
+                <div style="min-width:150px;">
+                  <div style="font-size:13px; font-weight:600;
+                              color:#1e293b;">
+                    {{ candidate.student.get_full_name }}
+                  </div>
+                  <div style="font-size:11px; color:#94a3b8;">
+                    Adm: {{ candidate.student.admission_number }}
+                  </div>
+                </div>
+                <!-- Bar -->
+                <div style="flex:1; background:#f0fdf4;
+                            border-radius:6px; height:24px;
+                            overflow:hidden;">
+                  <div class="result-bar"
+                       data-candidate="{{ candidate.id }}"
+                       style="height:100%; border-radius:6px;
+                              background:{{ candidate.get_avatar_color }};
+                              width:{{ candidate.vote_percentage }}%;
+                              transition:width 0.6s ease;
+                              display:flex; align-items:center;
+                              justify-content:flex-end;
+                              padding-right:8px; min-width:0;">
+                    {% if candidate.vote_count > 0 %}
+                      <span style="font-size:11px; font-weight:700;
+                                   color:#fff; white-space:nowrap;">
+                        {{ candidate.vote_count }}
+                      </span>
+                    {% endif %}
+                  </div>
+                </div>
+                <!-- Percentage -->
+                <div style="min-width:40px; text-align:right;
+                            font-size:12px; font-weight:600;
+                            color:#166534;">
+                  {{ candidate.vote_percentage }}%
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+
+          <!-- Doughnut -->
+          <div class="col-lg-4">
+            <div style="position:relative; width:180px; height:180px;
+                        margin:0 auto;">
+              <canvas id="donut-{{ position.id }}"></canvas>
+            </div>
+            <div style="margin-top:12px;">
+              {% for candidate in position.candidates.all %}
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <div style="width:10px; height:10px; border-radius:2px;
+                              background:{{ candidate.get_avatar_color }};
+                              flex-shrink:0;"></div>
+                  <div style="font-size:11px; color:#64748b;
+                              white-space:nowrap; overflow:hidden;
+                              text-overflow:ellipsis;">
+                    {{ candidate.student.first_name }}
+                    — {{ candidate.vote_percentage }}%
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+  const electionId   = {{ election.id }};
+  const apiUrl       = "{% url 'admin_results_api' election.id %}";
+  const donutCharts  = {};
+  let   currentPanel = null;
+
+  // Build initial doughnuts
+  {% for position in positions %}
+    (function() {
+      const ctx  = document.getElementById('donut-{{ position.id }}');
+      if (!ctx) return;
+      const data  = [{% for c in position.candidates.all %}
+                       {{ c.vote_count }},
+                     {% endfor %}];
+      const colors= [{% for c in position.candidates.all %}
+                       '{{ c.get_avatar_color }}',
+                     {% endfor %}];
+      donutCharts[{{ position.id }}] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          datasets: [{
+            data: data,
+            backgroundColor: colors,
+            borderWidth: 2,
+            borderColor: '#fff',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '65%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx =>
+                  ' ' + ctx.parsed + ' votes'
+              }
+            }
+          }
+        }
+      });
+    })();
+  {% endfor %}
+
+  function switchPosition(posId, btn) {
+    document.querySelectorAll('.result-panel').forEach(p => {
+      p.style.display = 'none';
+    });
+    document.querySelectorAll('.pos-result-tab').forEach(t => {
+      t.style.borderBottomColor = 'transparent';
+      t.style.color             = '#94a3b8';
+    });
+    document.getElementById('panel-' + posId).style.display = 'block';
+    btn.style.borderBottomColor = '#16a34a';
+    btn.style.color             = '#166534';
+  }
+
+  // Poll every 5 seconds
+  function fetchResults() {
+    fetch(apiUrl)
+      .then(r => r.json())
+      .then(data => {
+        // Update stat cards
+        document.getElementById('stat-total-votes').textContent =
+          data.total_votes;
+        document.getElementById('stat-voters').textContent =
+          data.voters_count;
+        document.getElementById('stat-turnout').textContent =
+          data.turnout + '%';
+        document.getElementById('turnout-bar').style.width =
+          data.turnout + '%';
+
+        // Update bars and doughnuts
+        data.positions.forEach(pos => {
+          pos.candidates.forEach(c => {
+            // Update bar width
+            const bar = document.querySelector(
+              '.result-bar[data-candidate="' + c.id + '"]'
+            );
+            if (bar) {
+              bar.style.width = c.percentage + '%';
+              if (c.votes > 0) {
+                bar.innerHTML =
+                  '<span style="font-size:11px;font-weight:700;'
+                  + 'color:#fff;white-space:nowrap;padding-right:8px;">'
+                  + c.votes + '</span>';
+              }
+            }
+          });
+          // Update doughnut
+          const chart = donutCharts[pos.position_id];
+          if (chart) {
+            chart.data.datasets[0].data =
+              pos.candidates.map(c => c.votes);
+            chart.update('none');
+          }
+          // Update tab badge
+          const tab = document.getElementById('tab-' + pos.position_id);
+          if (tab) {
+            const badge = tab.querySelector('span');
+            if (badge) badge.textContent = pos.total_votes;
+          }
+        });
+
+        // Update timestamp
+        const now = new Date();
+        document.getElementById('last-updated').textContent =
+          'Updated ' + now.toLocaleTimeString();
+      })
+      .catch(() => {});
+  }
+
+  setInterval(fetchResults, 5000);
+</script>
+{% endblock %}

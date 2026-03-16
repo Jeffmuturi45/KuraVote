@@ -1,0 +1,209 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — Students{% endblock %}
+{% block nav_students %}active{% endblock %}
+{% block page_title %}Student List{% endblock %}
+{% block page_title_2 %}Students{% endblock %}
+
+{% block admin_content %}
+
+<div class="action-bar">
+  <div>
+    <div class="section-title">Registered Students</div>
+    <div class="section-sub">
+      {{ students.paginator.count }} student{{ students.paginator.count|pluralize }} total
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'admin_upload_csv' %}" class="btn-kura">
+      <i class="fa fa-file-csv"></i>
+      Upload CSV
+    </a>
+  </div>
+</div>
+
+<!-- Search -->
+<form method="GET" class="mb-3">
+  <div class="input-group" style="max-width:400px;">
+    <span class="input-group-text"
+          style="background:#fff; border-color:var(--border);
+                 border-radius:10px 0 0 10px;">
+      <i class="fa fa-search" style="color:#94a3b8;"></i>
+    </span>
+    <input type="text"
+           name="q"
+           value="{{ query }}"
+           class="form-control"
+           placeholder="Search by name, admission number or email..."
+           style="border-left:none; border-radius:0 10px 10px 0;">
+    {% if query %}
+      <a href="{% url 'admin_students' %}"
+         class="btn-kura-outline ms-2"
+         style="border-radius:10px; padding:8px 14px;">
+        <i class="fa fa-times"></i>
+      </a>
+    {% endif %}
+  </div>
+</form>
+
+<div class="kura-table">
+  <table class="table table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Student</th>
+        <th>Admission No</th>
+        <th>Email</th>
+        <th>Password</th>
+        <th>Status</th>
+        <th>Joined</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for student in students %}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-3">
+              <div style="width:36px; height:36px; border-radius:50%;
+                          background:{{ student.get_avatar_color }};
+                          display:flex; align-items:center;
+                          justify-content:center; color:#fff;
+                          font-family:'Sora',sans-serif;
+                          font-weight:700; font-size:12px;
+                          flex-shrink:0;">
+                {{ student.get_initials }}
+              </div>
+              <div>
+                <div style="font-weight:600; font-size:13px;
+                            color:#1e293b;">
+                  {{ student.get_full_name }}
+                </div>
+              </div>
+            </div>
+          </td>
+          <td style="font-size:13px; font-weight:600;
+                     color:#166534;">
+            {{ student.admission_number }}
+          </td>
+          <td style="font-size:12px; color:#64748b;">
+            {{ student.email }}
+          </td>
+          <td>
+            {% if student.password_changed %}
+              <span style="font-size:11px; background:#dcfce7;
+                           color:#166534; padding:3px 10px;
+                           border-radius:10px; font-weight:500;">
+                <i class="fa fa-check me-1"></i>Changed
+              </span>
+            {% else %}
+              <span style="font-size:11px; background:#fefce8;
+                           color:#854d0e; padding:3px 10px;
+                           border-radius:10px; font-weight:500;">
+                <i class="fa fa-key me-1"></i>Default
+              </span>
+            {% endif %}
+          </td>
+          <td>
+            {% if student.is_active %}
+              <span style="font-size:11px; background:#dcfce7;
+                           color:#166534; padding:3px 10px;
+                           border-radius:10px; font-weight:500;">
+                Active
+              </span>
+            {% else %}
+              <span style="font-size:11px; background:#fee2e2;
+                           color:#991b1b; padding:3px 10px;
+                           border-radius:10px; font-weight:500;">
+                Inactive
+              </span>
+            {% endif %}
+          </td>
+          <td style="font-size:12px; color:#94a3b8;">
+            {{ student.date_joined|date:"d M Y" }}
+          </td>
+          <td>
+            <div class="d-flex gap-1 flex-wrap">
+              <!-- Reset password -->
+              <form method="POST"
+                    action="{% url 'admin_reset_password' student.pk %}"
+                    style="display:inline;"
+                    onsubmit="return confirm(
+                      'Reset password for {{ student.get_full_name }}?\n'
+                      + 'Their password will be reset to their admission number.')">
+                {% csrf_token %}
+                <button type="submit"
+                        class="tbl-btn tbl-btn-info"
+                        title="Reset password">
+                  <i class="fa fa-key"></i>
+                </button>
+              </form>
+              <!-- Activate/Deactivate -->
+              <form method="POST"
+                    action="{% url 'admin_toggle_student' student.pk %}"
+                    style="display:inline;"
+                    onsubmit="return confirm(
+                      '{% if student.is_active %}Deactivate{% else %}Activate{% endif %}'
+                      + ' {{ student.get_full_name }}?')">
+                {% csrf_token %}
+                <button type="submit"
+                        class="tbl-btn
+                        {% if student.is_active %}tbl-btn-danger
+                        {% else %}tbl-btn-success{% endif %}"
+                        title="{% if student.is_active %}Deactivate
+                               {% else %}Activate{% endif %}">
+                  <i class="fa fa-{% if student.is_active %}ban
+                             {% else %}check{% endif %}"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <i class="fa fa-user-graduate"></i>
+              <p>No students found.</p>
+              <a href="{% url 'admin_upload_csv' %}" class="btn-kura">
+                <i class="fa fa-file-csv"></i>
+                Upload CSV to add students
+              </a>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% if students.has_other_pages %}
+  <div class="d-flex justify-content-center mt-4 gap-1">
+    {% if students.has_previous %}
+      <a href="?page={{ students.previous_page_number }}{% if query %}&q={{ query }}{% endif %}"
+         class="btn-kura-outline" style="padding:7px 14px;">
+        <i class="fa fa-chevron-left"></i>
+      </a>
+    {% endif %}
+    {% for num in students.paginator.page_range %}
+      {% if students.number == num %}
+        <span class="btn-kura" style="padding:7px 14px;">
+          {{ num }}
+        </span>
+      {% elif num > students.number|add:'-3' and num < students.number|add:'3' %}
+        <a href="?page={{ num }}{% if query %}&q={{ query }}{% endif %}"
+           class="btn-kura-outline" style="padding:7px 14px;">
+          {{ num }}
+        </a>
+      {% endif %}
+    {% endfor %}
+    {% if students.has_next %}
+      <a href="?page={{ students.next_page_number }}{% if query %}&q={{ query }}{% endif %}"
+         class="btn-kura-outline" style="padding:7px 14px;">
+        <i class="fa fa-chevron-right"></i>
+      </a>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% endblock %}
