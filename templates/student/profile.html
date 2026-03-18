@@ -1,0 +1,429 @@
+{% extends 'student/base_student.html' %}
+
+{% block title %}KuraVote — Profile{% endblock %}
+{% block nav_profile %}active{% endblock %}
+
+{% block student_content %}
+<div class="px-3 pt-3 content-pad">
+
+  <!-- Profile Header -->
+  <div class="mb-4"
+       style="background:linear-gradient(135deg,#14532d,#16a34a);
+              border-radius:16px; padding:24px; text-align:center;
+              color:#fff;">
+    <div style="width:72px; height:72px; border-radius:50%;
+                background:rgba(255,255,255,0.15);
+                display:flex; align-items:center;
+                justify-content:center; margin:0 auto 12px;
+                font-family:'Sora',sans-serif; font-weight:700;
+                font-size:1.6rem; color:#fff;
+                border:3px solid rgba(255,255,255,0.3);">
+      {{ student.get_initials }}
+    </div>
+    <div style="font-family:'Sora',sans-serif; font-weight:700;
+                font-size:1.1rem; margin-bottom:4px;">
+      {{ student.get_full_name }}
+    </div>
+    <div style="font-size:0.8rem; opacity:0.7;">
+      Admission No: {{ student.admission_number }}
+    </div>
+  </div>
+
+  <!-- Student Details -->
+  <div class="mb-4"
+       style="background:#fff; border-radius:14px;
+              border:1px solid #bbf7d0; overflow:hidden;">
+    <div style="padding:14px 16px; border-bottom:1px solid #f0fdf4;
+                font-family:'Sora',sans-serif; font-size:0.85rem;
+                font-weight:700; color:#166534;">
+      <i class="fa fa-user me-2"></i>
+      Personal Details
+    </div>
+    <div style="padding:4px 0;">
+
+      <div style="display:flex; align-items:center;
+                  padding:12px 16px; border-bottom:1px solid #f0fdf4;">
+        <div style="width:120px; font-size:0.78rem;
+                    color:#94a3b8; flex-shrink:0;">
+          First Name
+        </div>
+        <div style="font-size:0.88rem; font-weight:500;
+                    color:#1e293b;">
+          {{ student.first_name }}
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center;
+                  padding:12px 16px; border-bottom:1px solid #f0fdf4;">
+        <div style="width:120px; font-size:0.78rem;
+                    color:#94a3b8; flex-shrink:0;">
+          Last Name
+        </div>
+        <div style="font-size:0.88rem; font-weight:500;
+                    color:#1e293b;">
+          {{ student.last_name }}
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center;
+                  padding:12px 16px; border-bottom:1px solid #f0fdf4;">
+        <div style="width:120px; font-size:0.78rem;
+                    color:#94a3b8; flex-shrink:0;">
+          Email
+        </div>
+        <div style="font-size:0.88rem; color:#1e293b;
+                    word-break:break-all;">
+          {{ student.email }}
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center;
+                  padding:12px 16px; border-bottom:1px solid #f0fdf4;">
+        <div style="width:120px; font-size:0.78rem;
+                    color:#94a3b8; flex-shrink:0;">
+          Adm Number
+        </div>
+        <div style="font-size:0.88rem; font-weight:600;
+                    color:#166534;">
+          {{ student.admission_number }}
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center;
+                  padding:12px 16px;">
+        <div style="width:120px; font-size:0.78rem;
+                    color:#94a3b8; flex-shrink:0;">
+          Joined
+        </div>
+        <div style="font-size:0.88rem; color:#1e293b;">
+          {{ student.date_joined|date:"d F Y" }}
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Account Status Card -->
+<div class="mb-4"
+     style="background:#fff; border-radius:14px;
+            border:1px solid
+            {% if student.is_active %}#bbf7d0{% else %}#fecaca{% endif %};
+            overflow:hidden;">
+
+  <div style="padding:14px 16px; border-bottom:1px solid
+              {% if student.is_active %}#f0fdf4{% else %}#fef2f2{% endif %};
+              font-family:'Sora',sans-serif; font-size:0.85rem;
+              font-weight:700;
+              color:{% if student.is_active %}#166534{% else %}#dc2626{% endif %};">
+    <i class="fa fa-shield-alt me-2"></i>
+    Account Status
+  </div>
+
+  <div style="padding:14px 16px;">
+
+    <!-- Active/Inactive badge -->
+    <div style="display:flex; align-items:center;
+                justify-content:space-between; margin-bottom:14px;">
+      <div style="font-size:0.82rem; color:#64748b;">
+        Current Status
+      </div>
+      {% if student.is_active %}
+        <div style="display:flex; align-items:center; gap:8px;
+                    background:#f0fdf4; border:1px solid #86efac;
+                    border-radius:20px; padding:6px 14px;">
+          <span style="width:8px; height:8px; border-radius:50%;
+                       background:#16a34a; display:inline-block;
+                       animation:pulse 1.5s infinite;"></span>
+          <span style="font-size:0.82rem; font-weight:600;
+                       color:#166534;">Active</span>
+        </div>
+      {% else %}
+        <div style="display:flex; align-items:center; gap:8px;
+                    background:#fef2f2; border:1px solid #fecaca;
+                    border-radius:20px; padding:6px 14px;">
+          <span style="width:8px; height:8px; border-radius:50%;
+                       background:#dc2626; display:inline-block;">
+          </span>
+          <span style="font-size:0.82rem; font-weight:600;
+                       color:#dc2626;">Deactivated</span>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Voting eligibility -->
+    <div style="display:flex; align-items:center;
+                justify-content:space-between; margin-bottom:14px;">
+      <div style="font-size:0.82rem; color:#64748b;">
+        Voting Eligibility
+      </div>
+      {% if student.is_active %}
+        <div style="font-size:0.82rem; font-weight:600;
+                    color:#16a34a;">
+          <i class="fa fa-check-circle me-1"></i>
+          Eligible to vote
+        </div>
+      {% else %}
+        <div style="font-size:0.82rem; font-weight:600;
+                    color:#dc2626;">
+          <i class="fa fa-times-circle me-1"></i>
+          Not eligible to vote
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Password status -->
+    <div style="display:flex; align-items:center;
+                justify-content:space-between; margin-bottom:14px;">
+      <div style="font-size:0.82rem; color:#64748b;">
+        Password Status
+      </div>
+      {% if student.password_changed %}
+        <div style="font-size:0.82rem; font-weight:600;
+                    color:#16a34a;">
+          <i class="fa fa-lock me-1"></i>
+          Custom password set
+        </div>
+      {% else %}
+        <div style="font-size:0.82rem; font-weight:600;
+                    color:#eab308;">
+          <i class="fa fa-exclamation-circle me-1"></i>
+          Using default password
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Member since -->
+    <div style="display:flex; align-items:center;
+                justify-content:space-between;">
+      <div style="font-size:0.82rem; color:#64748b;">
+        Registered
+      </div>
+      <div style="font-size:0.82rem; color:#1e293b; font-weight:500;">
+        {{ student.date_joined|date:"d F Y" }}
+      </div>
+    </div>
+
+    <!-- Deactivated warning -->
+    {% if not student.is_active %}
+      <div style="margin-top:14px; background:#fef2f2;
+                  border:1px solid #fecaca; border-radius:10px;
+                  padding:12px 14px; font-size:0.78rem;
+                  color:#991b1b; display:flex;
+                  align-items:flex-start; gap:8px;">
+        <i class="fa fa-exclamation-triangle"
+           style="margin-top:1px; flex-shrink:0;"></i>
+        <span>
+          Your account has been deactivated.
+          You cannot vote in any election.
+          Please contact your administrator to
+          reactivate your account.
+        </span>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+  <!-- Read-only notice -->
+  <div class="mb-4"
+       style="background:#fefce8; border:1px solid #fde68a;
+              border-radius:10px; padding:12px 14px;
+              font-size:0.78rem; color:#854d0e;
+              display:flex; align-items:flex-start; gap:8px;">
+    <i class="fa fa-info-circle"
+       style="margin-top:1px; flex-shrink:0;"></i>
+    <span>
+      Your personal details are set by the administrator
+      from the CSV upload. Only your password can be changed.
+    </span>
+  </div>
+
+  <!-- Change Password Form -->
+  <div style="background:#fff; border-radius:14px;
+              border:1px solid #bbf7d0; overflow:hidden;"
+       id="change-password-section">
+
+    <div style="padding:14px 16px; border-bottom:1px solid #f0fdf4;
+                font-family:'Sora',sans-serif; font-size:0.85rem;
+                font-weight:700; color:#166534;
+                display:flex; align-items:center;
+                justify-content:space-between; cursor:pointer;"
+         onclick="togglePasswordForm()">
+      <div>
+        <i class="fa fa-lock me-2"></i>
+        Change Password
+      </div>
+      <i class="fa fa-chevron-down" id="pw-chevron"
+         style="font-size:0.75rem; color:#94a3b8;
+                transition:transform 0.2s;"></i>
+    </div>
+
+    <div id="password-form-body" style="display:none;">
+      <div style="padding:16px;">
+
+        <form method="POST" novalidate id="pw-form">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label style="font-size:0.82rem; font-weight:500;
+                          color:#374151; display:block;
+                          margin-bottom:6px;">
+              Current Password
+            </label>
+            {{ form.current_password }}
+            {% if form.current_password.errors %}
+              <div style="color:#dc2626; font-size:0.75rem;
+                          margin-top:4px;">
+                <i class="fa fa-exclamation-circle me-1"></i>
+                {{ form.current_password.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label style="font-size:0.82rem; font-weight:500;
+                          color:#374151; display:block;
+                          margin-bottom:6px;">
+              New Password
+            </label>
+            {{ form.new_password1 }}
+            {% if form.new_password1.errors %}
+              <div style="color:#dc2626; font-size:0.75rem;
+                          margin-top:4px;">
+                {{ form.new_password1.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-4">
+            <label style="font-size:0.82rem; font-weight:500;
+                          color:#374151; display:block;
+                          margin-bottom:6px;">
+              Confirm New Password
+            </label>
+            {{ form.new_password2 }}
+            {% if form.new_password2.errors %}
+              <div style="color:#dc2626; font-size:0.75rem;
+                          margin-top:4px;">
+                {{ form.new_password2.errors.0 }}
+              </div>
+            {% endif %}
+          </div>
+
+          {% if form.non_field_errors %}
+            <div style="background:#fef2f2; border:1px solid #fecaca;
+                        border-radius:10px; padding:10px 14px;
+                        font-size:0.78rem; color:#991b1b;
+                        margin-bottom:14px;">
+              <i class="fa fa-exclamation-circle me-1"></i>
+              {{ form.non_field_errors.0 }}
+            </div>
+          {% endif %}
+
+          <button type="submit"
+                  id="pw-submit-btn"
+                  style="width:100%; background:#16a34a; color:#fff;
+                         border:none; border-radius:12px; padding:12px;
+                         font-family:'Sora',sans-serif; font-size:0.9rem;
+                         font-weight:600; cursor:pointer;
+                         transition:background 0.15s;"
+                  onmouseover="this.style.background='#15803d'"
+                  onmouseout="this.style.background='#16a34a'">
+            <i class="fa fa-save me-2"></i>
+            Update Password
+          </button>
+
+        </form>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Voting status -->
+  {% if election %}
+    <div class="mt-4"
+         style="background:#fff; border-radius:14px;
+                border:1px solid #bbf7d0; overflow:hidden;">
+      <div style="padding:14px 16px; border-bottom:1px solid #f0fdf4;
+                  font-family:'Sora',sans-serif; font-size:0.85rem;
+                  font-weight:700; color:#166534;">
+        <i class="fa fa-vote-yea me-2"></i>
+        Voting Status — {{ election.election_name }}
+      </div>
+      <div style="padding:4px 0;">
+        {% for position in election.positions.all %}
+          <div style="display:flex; align-items:center;
+                      justify-content:space-between;
+                      padding:11px 16px;
+                      border-bottom:1px solid #f0fdf4;">
+            <div style="font-size:0.85rem; color:#1e293b;">
+              {{ position.position_name }}
+            </div>
+            {% if position.id in voted_positions %}
+              <span style="font-size:0.72rem; background:#dcfce7;
+                           color:#166534; padding:3px 10px;
+                           border-radius:10px; font-weight:500;">
+                <i class="fa fa-check me-1"></i>Voted
+              </span>
+            {% else %}
+              <a href="{% url 'ballot' %}"
+                 style="font-size:0.72rem; background:#16a34a;
+                        color:#fff; border-radius:10px;
+                        padding:4px 12px; text-decoration:none;
+                        font-weight:500;">
+                Vote Now
+              </a>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Logout button -->
+  <div class="mt-4 mb-2">
+    <a href="{% url 'logout' %}"
+       style="display:block; text-align:center; background:#fff;
+              border:1.5px solid #fecaca; border-radius:12px;
+              padding:12px; color:#dc2626; font-weight:600;
+              font-size:0.88rem; text-decoration:none;
+              transition:all 0.15s;"
+       onclick="return confirm('Log out of KuraVote?')"
+       onmouseover="this.style.background='#fef2f2'"
+       onmouseout="this.style.background='#fff'">
+      <i class="fa fa-sign-out-alt me-2"></i>
+      Logout
+    </a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function togglePasswordForm() {
+    const body    = document.getElementById('password-form-body');
+    const chevron = document.getElementById('pw-chevron');
+    const isOpen  = body.style.display !== 'none';
+    body.style.display    = isOpen ? 'none' : 'block';
+    chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+  }
+
+  // Auto open if there are form errors
+  {% if form.errors %}
+    togglePasswordForm();
+  {% endif %}
+
+  // Submit loader
+  const pwForm = document.getElementById('pw-form');
+  const pwBtn  = document.getElementById('pw-submit-btn');
+  if (pwForm && pwBtn) {
+    pwForm.addEventListener('submit', function() {
+      pwBtn.disabled   = true;
+      pwBtn.innerHTML  =
+        '<span class="spinner-border spinner-border-sm me-2"></span>'
+        + 'Saving...';
+    });
+  }
+</script>
+{% endblock %}

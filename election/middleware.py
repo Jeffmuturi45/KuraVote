@@ -21,6 +21,9 @@ Redirect to change_password — they cannot go anywhere else'''
 
 from django.shortcuts import redirect
 from django.urls import reverse, NoReverseMatch
+from django.core.cache import cache
+from django.utils import timezone
+import time
 
 
 class ForcePasswordChangeMiddleware:
@@ -30,26 +33,51 @@ class ForcePasswordChangeMiddleware:
 
     def __call__(self, request):
 
-        # ── Run this code before the view ─────────────────────
+        # ── Auto-close expired elections ──────────────────
+        # Check at most once every 60 seconds to avoid
+        # hitting the DB on every single request
+        last_check = cache.get('election_autoclose_check')
+        if not last_check:
+            try:
+                from .models import Election
+                expired = Election.objects.filter(
+                    status=Election.STATUS_ACTIVE,
+                    end_date__lte=timezone.now()
+                )
+                for election in expired:
+                    election.status = Election.STATUS_CLOSED
+                    election.save()
+            except Exception:
+                pass
+            # Only check again after 60 seconds
+            cache.set('election_autoclose_check', True, timeout=60)
+
+        # ── Track active users ────────────────────────────
+        if request.user.is_authenticated \
+                and not request.user.is_staff:
+            cache_key = f'active_user_{request.user.id}'
+            cache.set(cache_key, {
+                'user_id':   request.user.id,
+                'name':      request.user.get_full_name(),
+                'admission': request.user.admission_number,
+                'last_seen': time.time(),
+            }, timeout=300)
+
+            active_ids = cache.get('active_user_ids', set())
+            active_ids.add(request.user.id)
+            cache.set('active_user_ids', active_ids, timeout=300)
+
+        # ── Force password change ─────────────────────────
         if request.user.is_authenticated:
-
-            # ── Skip for admin/staff users ────────────────────
             if not request.user.is_staff:
-
-                # ── Check if password has been changed ────────
                 if not request.user.password_changed:
-
                     try:
                         change_url = reverse('change_password')
                         logout_url = reverse('logout')
                         allowed_urls = [change_url, logout_url]
-
                         if request.path not in allowed_urls:
                             return redirect('change_password')
-
                     except NoReverseMatch:
-                        # URLs not configured yet — let it pass
-                        # This prevents crashes during development
                         pass
 
         response = self.get_response(request)

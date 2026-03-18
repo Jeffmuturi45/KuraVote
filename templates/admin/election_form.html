@@ -91,6 +91,26 @@
             </div>
           {% endif %}
         </div>
+        <div class="mb-4">
+  <label class="form-label"
+         style="font-size:0.85rem; font-weight:500;">
+    Announcement
+    <span style="color:#94a3b8; font-weight:400;">
+      (optional)
+    </span>
+  </label>
+  {{ form.announcement }}
+  <div style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">
+    <i class="fa fa-info-circle me-1"></i>
+    Shown as a yellow banner on the student dashboard and ballot page.
+    Leave blank for no announcement.
+  </div>
+  {% if form.announcement.errors %}
+    <div class="text-danger mt-1" style="font-size:0.78rem;">
+      {{ form.announcement.errors.0 }}
+    </div>
+  {% endif %}
+</div>
 
         <!-- Non-field errors -->
         {% if form.non_field_errors %}

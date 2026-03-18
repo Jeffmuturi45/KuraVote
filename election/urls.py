@@ -52,6 +52,7 @@ urlpatterns = [
         name='student_profile'
     ),
 
+
     # ── Admin Side ────────────────────────────────────────
     path(
         'admin-panel/',
@@ -149,9 +150,29 @@ urlpatterns = [
         name='admin_toggle_student'
     ),
     path(
+        'admin-panel/students/<int:pk>/edit/',
+        views.admin_student_edit,
+        name='admin_student_edit'
+    ),
+    path(
+        'admin-panel/students/<int:pk>/delete/',
+        views.admin_student_delete,
+        name='admin_student_delete'
+    ),
+    path(
+        'admin-panel/students/delete-all/',
+        views.admin_students_delete_all,
+        name='admin_students_delete_all'
+    ),
+    path(
         'admin-panel/results/<int:election_id>/',
         views.admin_live_results,
         name='admin_live_results'
+    ),
+    path(
+        'admin-panel/active-users/',
+        views.admin_active_users_api,
+        name='admin_active_users_api'
     ),
     path(
         'admin-panel/results/<int:election_id>/api/',

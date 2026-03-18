@@ -96,7 +96,8 @@ class ElectionForm(forms.ModelForm):
 
     class Meta:
         model = Election
-        fields = ['election_name', 'start_date', 'end_date', 'status']
+        fields = ['election_name', 'start_date',
+                  'end_date', 'status', 'announcement']
         widgets = {
             'election_name': forms.TextInput(attrs={
                 'class':       'form-control',
@@ -112,6 +113,12 @@ class ElectionForm(forms.ModelForm):
             }),
             'status': forms.Select(attrs={
                 'class': 'form-select',
+            }),
+            'announcement': forms.Textarea(attrs={
+                'class':       'form-control',
+                'rows':        3,
+                'placeholder': 'e.g. Voting closes at 5PM today. '
+                'Make sure to cast your vote!',
             }),
         }
 
@@ -242,3 +249,15 @@ class StudentPasswordChangeForm(forms.Form):
         self.user.set_password(self.cleaned_data['new_password1'])
         self.user.password_changed = True
         self.user.save()
+
+
+class StudentEditForm(forms.ModelForm):
+    class Meta:
+        model = Student
+        fields = ['first_name', 'last_name', 'email', 'is_active']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }

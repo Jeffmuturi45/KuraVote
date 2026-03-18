@@ -9,44 +9,44 @@
 
 <!-- ── Stat Cards ── -->
 <div class="row g-3 mb-4">
-  <div class="col-xl-3 col-md-6">
+
+  <div class="col-xl col-md-6">
     <div class="stat-card">
       <div class="stat-label">
-        <i class="fa fa-user-graduate"
-           style="color:#16a34a"></i>
+        <i class="fa fa-user-graduate" style="color:#16a34a"></i>
         Total Students
       </div>
       <div class="stat-value">{{ total_students }}</div>
       <div class="stat-sub">registered voters</div>
     </div>
   </div>
-  <div class="col-xl-3 col-md-6">
+
+  <div class="col-xl col-md-6">
     <div class="stat-card">
       <div class="stat-label">
-        <i class="fa fa-vote-yea"
-           style="color:#16a34a"></i>
+        <i class="fa fa-vote-yea" style="color:#16a34a"></i>
         Total Elections
       </div>
       <div class="stat-value">{{ total_elections }}</div>
       <div class="stat-sub">all time</div>
     </div>
   </div>
-  <div class="col-xl-3 col-md-6">
+
+  <div class="col-xl col-md-6">
     <div class="stat-card">
       <div class="stat-label">
-        <i class="fa fa-users"
-           style="color:#16a34a"></i>
+        <i class="fa fa-users" style="color:#16a34a"></i>
         Total Candidates
       </div>
       <div class="stat-value">{{ total_candidates }}</div>
       <div class="stat-sub">across all elections</div>
     </div>
   </div>
-  <div class="col-xl-3 col-md-6">
+
+  <div class="col-xl col-md-6">
     <div class="stat-card">
       <div class="stat-label">
-        <i class="fa fa-chart-pie"
-           style="color:#16a34a"></i>
+        <i class="fa fa-chart-pie" style="color:#16a34a"></i>
         Voter Turnout
       </div>
       <div class="stat-value"
@@ -57,11 +57,47 @@
       </div>
       <div style="height:5px; background:#d1fae5;
                   border-radius:3px; margin-top:8px; overflow:hidden;">
-        <div style="height:100%; background:#16a34a; width:{{ turnout }}%;
-                    border-radius:3px; transition:width 0.5s;"></div>
+        <div style="height:100%; background:#16a34a;
+                    width:{{ turnout }}%; border-radius:3px;
+                    transition:width 0.5s;"></div>
       </div>
     </div>
   </div>
+
+  <div class="col-xl col-md-6">
+    <div class="stat-card" style="border-color:#86efac;">
+      <div class="stat-label">
+        <span style="width:8px; height:8px; border-radius:50%;
+                     background:#16a34a; display:inline-block;
+                     animation:pulse 1.5s infinite;
+                     margin-right:4px;"></span>
+        Active Now
+      </div>
+      <div class="stat-value" id="active-users-count"
+           style="color:#16a34a;">
+        {{ active_users_count }}
+      </div>
+      <div class="stat-sub">students online</div>
+      <div style="margin-top:8px;" id="active-users-list">
+        {% for user in active_users|slice:":3" %}
+          <div style="font-size:10px; color:#94a3b8;
+                      white-space:nowrap; overflow:hidden;
+                      text-overflow:ellipsis;">
+            <i class="fa fa-circle"
+               style="color:#16a34a; font-size:6px;
+                      margin-right:4px;"></i>
+            {{ user.name }}
+          </div>
+        {% endfor %}
+        {% if active_users_count > 3 %}
+          <div style="font-size:10px; color:#94a3b8;">
+            + {{ active_users_count|add:"-3" }} more
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ── Active Election Banner / No Election ── -->
@@ -315,4 +351,46 @@
   </div>
 </div>
 
+{% block extra_js %}
+<script>
+function fetchActiveUsers() {
+  fetch("{% url 'admin_active_users_api' %}")
+    .then(r => r.json())
+    .then(data => {
+      const countEl = document.getElementById('active-users-count');
+      if (countEl) countEl.textContent = data.count;
+
+      const listEl = document.getElementById('active-users-list');
+      if (!listEl) return;
+
+      if (data.users.length === 0) {
+        listEl.innerHTML =
+          '<div style="font-size:10px;color:#94a3b8;">'
+          + 'No students online</div>';
+        return;
+      }
+
+      let html = data.users.slice(0, 3).map(u =>
+        '<div style="font-size:10px;color:#94a3b8;'
+        + 'white-space:nowrap;overflow:hidden;'
+        + 'text-overflow:ellipsis;">'
+        + '<i class="fa fa-circle" style="color:#16a34a;'
+        + 'font-size:6px;margin-right:4px;"></i>'
+        + u.name + '</div>'
+      ).join('');
+
+      if (data.count > 3) {
+        html +=
+          '<div style="font-size:10px;color:#94a3b8;">+ '
+          + (data.count - 3) + ' more</div>';
+      }
+      listEl.innerHTML = html;
+    })
+    .catch(() => {});
+}
+
+fetchActiveUsers();
+setInterval(fetchActiveUsers, 10000);
+</script>
+{% endblock %}
 {% endblock %}

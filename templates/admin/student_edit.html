@@ -1,0 +1,106 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — Edit Student{% endblock %}
+{% block nav_students %}active{% endblock %}
+{% block page_title %}Edit Student{% endblock %}
+{% block page_title_2 %}Edit Student{% endblock %}
+
+{% block admin_content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="form-card">
+
+      <!-- Student header -->
+      <div class="d-flex align-items-center gap-3 mb-4"
+           style="background:#f0fdf4; border-radius:12px;
+                  padding:16px; border:1px solid #bbf7d0;">
+        <div style="width:48px; height:48px; border-radius:50%;
+                    background:{{ student.get_avatar_color }};
+                    display:flex; align-items:center;
+                    justify-content:center; color:#fff;
+                    font-family:'Sora',sans-serif; font-weight:700;
+                    font-size:1rem; flex-shrink:0;">
+          {{ student.get_initials }}
+        </div>
+        <div>
+          <div style="font-weight:700; font-size:14px; color:#166534;">
+            {{ student.get_full_name }}
+          </div>
+          <div style="font-size:12px; color:#94a3b8;">
+            Adm: {{ student.admission_number }}
+            — cannot be changed
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title mb-1">Edit Student Details</div>
+      <div class="section-sub mb-4">
+        Admission number cannot be changed once set.
+      </div>
+
+      <form method="POST" novalidate>
+        {% csrf_token %}
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">First Name</label>
+            <input type="text"
+                   name="first_name"
+                   class="form-control"
+                   value="{{ student.first_name }}"
+                   required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Last Name</label>
+            <input type="text"
+                   name="last_name"
+                   class="form-control"
+                   value="{{ student.last_name }}"
+                   required>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">Email Address</label>
+          <input type="email"
+                 name="email"
+                 class="form-control"
+                 value="{{ student.email }}"
+                 required>
+        </div>
+
+        <!-- Admission number - read only -->
+        <div class="mb-4">
+          <label class="form-label">
+            Admission Number
+            <span style="color:#94a3b8; font-weight:400;">
+              (read-only)
+            </span>
+          </label>
+          <input type="text"
+                 class="form-control"
+                 value="{{ student.admission_number }}"
+                 disabled
+                 style="background:#f8fafc; color:#94a3b8;">
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn-kura"
+                  style="padding:10px 24px;">
+            <i class="fa fa-save me-1"></i>
+            Save Changes
+          </button>
+          <a href="{% url 'admin_students' %}"
+             class="btn-kura-outline"
+             style="padding:10px 24px;">
+            Cancel
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

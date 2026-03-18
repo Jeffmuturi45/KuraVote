@@ -1,0 +1,265 @@
+{% extends 'student/base_student.html' %}
+
+{% block title %}KuraVote — Results{% endblock %}
+{% block nav_results %}active{% endblock %}
+
+{% block student_content %}
+<div class="px-3 pt-3 content-pad">
+
+  <div class="mb-3">
+    <h5 style="font-family:'Sora',sans-serif;
+               color:#166534; margin-bottom:2px;">
+      Election Results
+    </h5>
+    <p class="text-muted" style="font-size:0.82rem; margin:0;">
+      Live vote counts updated every 10 seconds.
+    </p>
+  </div>
+
+  {% if selected_election %}
+
+    {% if elections|length > 1 %}
+      <div class="mb-3">
+        <select class="form-select form-select-sm"
+                onchange="window.location.href=
+                          '?election='+this.value"
+                style="border-color:#bbf7d0; border-radius:10px;
+                       font-size:0.85rem; max-width:300px;">
+          {% for election in elections %}
+            <option value="{{ election.id }}"
+                    {% if election == selected_election %}
+                    selected{% endif %}>
+              {{ election.election_name }}
+              — {{ election.get_status_display }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+
+    <!-- Election banner -->
+    <div class="mb-4"
+         style="background:{% if selected_election.status == 'active' %}
+                linear-gradient(135deg,#14532d,#16a34a)
+                {% else %}#f8fafc{% endif %};
+                border-radius:14px; padding:16px 18px;
+                border:1px solid
+                {% if selected_election.status == 'active' %}
+                transparent{% else %}#e2e8f0{% endif %};">
+      <div style="display:flex; align-items:center;
+                  justify-content:space-between;
+                  flex-wrap:wrap; gap:8px;">
+        <div>
+          <div style="font-family:'Sora',sans-serif;
+                      font-size:0.95rem; font-weight:700;
+                      color:{% if selected_election.status == 'active' %}
+                      #fff{% else %}#1e293b{% endif %};">
+            {{ selected_election.election_name }}
+          </div>
+          <div style="font-size:0.75rem; margin-top:2px;
+                      color:{% if selected_election.status == 'active' %}
+                      rgba(255,255,255,0.7){% else %}#94a3b8{% endif %};">
+            {% if selected_election.status == 'active' %}
+              <span class="live-dot me-1"></span>
+              Live — updates every 10 seconds
+            {% else %}
+              Final results
+            {% endif %}
+          </div>
+        </div>
+        <div id="last-updated"
+             style="font-size:0.72rem;
+                    color:{% if selected_election.status == 'active' %}
+                    rgba(255,255,255,0.6){% else %}#94a3b8{% endif %};">
+        </div>
+      </div>
+    </div>
+
+    <!-- Results container — updated by JS -->
+    <div id="results-container">
+      {% for result in results %}
+        <div class="mb-4"
+             style="background:#fff; border-radius:14px;
+                    border:1px solid #bbf7d0; overflow:hidden;">
+
+          <div style="background:#14532d; padding:12px 16px;
+                      display:flex; align-items:center;
+                      justify-content:space-between;">
+            <div style="font-family:'Sora',sans-serif;
+                        font-weight:700; color:#fff; font-size:0.9rem;">
+              {{ result.position.position_name }}
+            </div>
+            <div class="pos-total-{{ result.position.id }}"
+                 style="font-size:0.72rem;
+                        color:rgba(255,255,255,0.6);">
+              {{ result.total_votes }} vote{{ result.total_votes|pluralize }}
+            </div>
+          </div>
+
+          <div style="padding:14px;">
+            {% for candidate in result.candidates %}
+              <div class="d-flex align-items-center gap-3 mb-3"
+                   id="cand-row-{{ candidate.id }}">
+                <div style="width:22px; text-align:center;
+                            flex-shrink:0;">
+                  {% if forloop.first and result.total_votes > 0 %}
+                    <i class="fa fa-trophy"
+                       style="color:#eab308; font-size:0.85rem;"></i>
+                  {% else %}
+                    <span style="font-size:0.75rem; color:#94a3b8;
+                                 font-weight:600;">
+                      {{ forloop.counter }}
+                    </span>
+                  {% endif %}
+                </div>
+
+                {% if candidate.has_photo %}
+                  <img src="{{ candidate.photo.url }}"
+                       style="width:40px; height:40px;
+                              border-radius:10px; object-fit:cover;
+                              flex-shrink:0;">
+                {% else %}
+                  <div style="width:40px; height:40px;
+                              border-radius:10px; flex-shrink:0;
+                              background:{{ candidate.get_avatar_color }};
+                              display:flex; align-items:center;
+                              justify-content:center; color:#fff;
+                              font-family:'Sora',sans-serif;
+                              font-weight:700; font-size:0.85rem;">
+                    {{ candidate.get_initials }}
+                  </div>
+                {% endif %}
+
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; align-items:center;
+                              justify-content:space-between;
+                              margin-bottom:4px;">
+                    <div style="font-size:0.85rem; font-weight:600;
+                                color:#1e293b; white-space:nowrap;
+                                overflow:hidden; text-overflow:ellipsis;
+                                max-width:60%;">
+                      {{ candidate.student.get_full_name }}
+                    </div>
+                    <div class="cand-votes-{{ candidate.id }}"
+                         style="font-size:0.78rem; font-weight:700;
+                                color:#166534; flex-shrink:0;">
+                      {{ candidate.vote_count }}
+                      <span style="font-size:0.68rem; color:#94a3b8;
+                                   font-weight:400;">
+                        ({{ candidate.vote_percentage }}%)
+                      </span>
+                    </div>
+                  </div>
+                  <div style="background:#f0fdf4; border-radius:4px;
+                              height:10px; overflow:hidden;">
+                    <div class="cand-bar-{{ candidate.id }}"
+                         style="height:100%; border-radius:4px;
+                                background:{% if forloop.first %}
+                                #16a34a{% else %}
+                                {{ candidate.get_avatar_color }}{% endif %};
+                                width:{{ candidate.vote_percentage }}%;
+                                transition:width 0.6s ease;">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+
+        </div>
+      {% endfor %}
+    </div>
+
+  {% else %}
+    <div style="text-align:center; padding:48px 20px;">
+      <i class="fa fa-chart-bar"
+         style="font-size:2.5rem; color:#bbf7d0;
+                display:block; margin-bottom:16px;"></i>
+      <h6 style="font-family:'Sora',sans-serif; color:#166534;">
+        No Results Available
+      </h6>
+      <p style="font-size:0.82rem; color:#94a3b8;">
+        Results will appear once an election is active
+        or completed.
+      </p>
+    </div>
+  {% endif %}
+
+</div>
+
+<style>
+  .live-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #4ade80; display: inline-block;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+{% if selected_election and selected_election.status == 'active' %}
+<script>
+const apiUrl = "{% url 'admin_results_api' selected_election.id %}";
+
+function fetchResults() {
+  fetch(apiUrl)
+    .then(r => r.json())
+    .then(data => {
+      data.positions.forEach(function(pos) {
+        // Update position total
+        const totalEl = document.querySelector(
+          '.pos-total-' + pos.position_id
+        );
+        if (totalEl) {
+          totalEl.textContent =
+            pos.total_votes + ' vote'
+            + (pos.total_votes !== 1 ? 's' : '');
+        }
+
+        pos.candidates.forEach(function(c) {
+          // Update vote count text
+          const votesEl = document.querySelector(
+            '.cand-votes-' + c.id
+          );
+          if (votesEl) {
+            votesEl.innerHTML =
+              c.votes
+              + ' <span style="font-size:0.68rem;color:#94a3b8;'
+              + 'font-weight:400;">(' + c.percentage + '%)</span>';
+          }
+
+          // Update bar width smoothly
+          const barEl = document.querySelector(
+            '.cand-bar-' + c.id
+          );
+          if (barEl) {
+            barEl.style.width = c.percentage + '%';
+          }
+        });
+      });
+
+      // Update timestamp
+      const now = new Date();
+      const el  = document.getElementById('last-updated');
+      if (el) {
+        el.textContent =
+          'Updated at '
+          + String(now.getHours()).padStart(2,'0') + ':'
+          + String(now.getMinutes()).padStart(2,'0') + ':'
+          + String(now.getSeconds()).padStart(2,'0');
+      }
+    })
+    .catch(function() {});
+}
+
+// Poll every 10 seconds
+setInterval(fetchResults, 10000);
+fetchResults();
+</script>
+{% endif %}
+{% endblock %}

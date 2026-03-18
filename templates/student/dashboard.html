@@ -17,24 +17,134 @@
     </p>
   </div>
 
+  {% if election and election.announcement %}
+  <div class="mb-3"
+       style="background:#fefce8; border:1.5px solid #fde68a;
+              border-radius:12px; padding:14px 16px;
+              display:flex; align-items:flex-start; gap:10px;">
+    <div style="width:34px; height:34px; border-radius:8px;
+                background:#eab308; display:flex;
+                align-items:center; justify-content:center;
+                flex-shrink:0; color:#fff; font-size:0.9rem;">
+      <i class="fa fa-bullhorn"></i>
+    </div>
+    <div>
+      <div style="font-size:0.7rem; font-weight:700;
+                  color:#854d0e; text-transform:uppercase;
+                  letter-spacing:0.5px; margin-bottom:4px;">
+        Announcement
+      </div>
+      <div style="font-size:0.85rem; color:#854d0e;
+                  line-height:1.5;">
+        {{ election.announcement }}
+      </div>
+    </div>
+  </div>
+{% endif %}
+
   {% if election %}
 
     <!-- ── Active Election Banner ── -->
-    <div class="mb-4" style="background:linear-gradient(135deg,
-         #14532d 0%, #16a34a 100%); border-radius:16px;
-         padding:20px; color:#fff;">
-      <div style="font-size:0.72rem; text-transform:uppercase;
-                  letter-spacing:1px; opacity:0.7; margin-bottom:6px;
-                  display:flex; align-items:center; gap:6px;">
-        <span style="width:7px; height:7px; border-radius:50%;
-                     background:#4ade80; display:inline-block;
-                     animation: pulse 1.5s infinite;"></span>
-        Election Active
+    {% if election %}
+
+  <div class="mb-4"
+       style="background:linear-gradient(135deg,#14532d 0%,#16a34a 100%);
+              border-radius:16px; padding:20px; color:#fff;">
+
+    <div style="font-size:0.72rem; text-transform:uppercase;
+                letter-spacing:1px; opacity:0.7; margin-bottom:6px;
+                display:flex; align-items:center; gap:6px;">
+      <span style="width:7px; height:7px; border-radius:50%;
+                   background:#4ade80; display:inline-block;
+                   animation:pulse 1.5s infinite;"></span>
+      Election Active
+    </div>
+
+    <div style="font-family:'Sora',sans-serif; font-size:1.1rem;
+                font-weight:700; margin-bottom:16px;">
+      {{ election.election_name }}
+    </div>
+
+    <!-- ── Countdown ── -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:0.7rem; opacity:0.7; margin-bottom:8px;
+                  text-transform:uppercase; letter-spacing:0.5px;">
+        Time Remaining to Vote
       </div>
-      <div style="font-family:'Sora',sans-serif; font-size:1.1rem;
-                  font-weight:700; margin-bottom:12px;">
-        {{ election.election_name }}
+      <div id="countdown-display"
+           style="display:flex; gap:8px; align-items:center;">
+        <div style="background:rgba(255,255,255,0.15);
+                    border-radius:10px; padding:8px 14px;
+                    text-align:center; min-width:56px;">
+          <div id="cd-hours"
+               style="font-family:'Sora',sans-serif;
+                      font-size:1.5rem; font-weight:700;
+                      color:#fff; line-height:1;">
+            00
+          </div>
+          <div style="font-size:0.58rem; opacity:0.65;
+                      margin-top:2px;">HRS</div>
+        </div>
+        <div style="font-family:'Sora',sans-serif;
+                    font-size:1.4rem; font-weight:700;
+                    color:rgba(255,255,255,0.6);">:</div>
+        <div style="background:rgba(255,255,255,0.15);
+                    border-radius:10px; padding:8px 14px;
+                    text-align:center; min-width:56px;">
+          <div id="cd-mins"
+               style="font-family:'Sora',sans-serif;
+                      font-size:1.5rem; font-weight:700;
+                      color:#fff; line-height:1;">
+            00
+          </div>
+          <div style="font-size:0.58rem; opacity:0.65;
+                      margin-top:2px;">MIN</div>
+        </div>
+        <div style="font-family:'Sora',sans-serif;
+                    font-size:1.4rem; font-weight:700;
+                    color:rgba(255,255,255,0.6);">:</div>
+        <div style="background:rgba(255,255,255,0.15);
+                    border-radius:10px; padding:8px 14px;
+                    text-align:center; min-width:56px;">
+          <div id="cd-secs"
+               style="font-family:'Sora',sans-serif;
+                      font-size:1.5rem; font-weight:700;
+                      color:#eab308; line-height:1;">
+            00
+          </div>
+          <div style="font-size:0.58rem; opacity:0.65;
+                      margin-top:2px;">SEC</div>
+        </div>
       </div>
+
+      <div id="countdown-expired"
+           style="display:none; margin-top:10px;
+                  background:rgba(255,255,255,0.15);
+                  border-radius:10px; padding:10px 14px;
+                  font-size:0.82rem; color:#fde68a;">
+        <i class="fa fa-exclamation-circle me-1"></i>
+        Voting time has ended. Please check back later.
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div style="font-size:0.75rem; opacity:0.8; margin-bottom:6px;
+                display:flex; justify-content:space-between;">
+      <span>Your voting progress</span>
+      <span>{{ votes_cast }} of {{ total_positions }} positions</span>
+    </div>
+    <div style="height:6px; background:rgba(255,255,255,0.2);
+                border-radius:3px; overflow:hidden;">
+      <div style="height:100%; border-radius:3px; background:#eab308;
+                  {% if total_positions > 0 %}
+                  width:{% widthratio votes_cast total_positions 100 %}%;
+                  {% else %}width:0%;{% endif %}
+                  transition:width 0.5s;"></div>
+    </div>
+
+  </div>
+
+{% endif %}
 
       <!-- Progress -->
       <div style="font-size:0.75rem; opacity:0.8; margin-bottom:6px;
@@ -175,4 +285,49 @@
     50%       { opacity: 0.4; }
   }
 </style>
+
+{% block extra_js %}
+{% if election %}
+<script>
+  const endDate = new Date("{{ election.end_date|date:'Y-m-d' }}T{{ election.end_date|time:'H:i:s' }}");
+
+  function updateCountdown() {
+    const now  = new Date();
+    const diff = endDate - now;
+
+    if (diff <= 0) {
+      document.getElementById('countdown-display').style.display
+        = 'none';
+      document.getElementById('countdown-expired').style.display
+        = 'block';
+      // Reload page after 3 seconds so election status updates
+      setTimeout(() => window.location.reload(), 3000);
+      return;
+    }
+
+    const totalHours = Math.floor(diff / (1000 * 60 * 60));
+    const mins       = Math.floor(
+      (diff % (1000 * 60 * 60)) / (1000 * 60)
+    );
+    const secs       = Math.floor((diff % (1000 * 60)) / 1000);
+
+    document.getElementById('cd-hours').textContent =
+      String(totalHours).padStart(2, '0');
+    document.getElementById('cd-mins').textContent =
+      String(mins).padStart(2, '0');
+    document.getElementById('cd-secs').textContent =
+      String(secs).padStart(2, '0');
+
+    // Turn seconds red when under 1 hour
+    if (totalHours < 1) {
+      document.getElementById('cd-secs').style.color = '#f87171';
+      document.getElementById('cd-mins').style.color = '#fde68a';
+    }
+  }
+
+  updateCountdown();
+  setInterval(updateCountdown, 1000);
+</script>
+{% endif %}
+{% endblock %}
 {% endblock %}

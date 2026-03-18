@@ -33,17 +33,17 @@
 
           <!-- Drop zone -->
           <div id="drop-zone"
-               style="border:2px dashed var(--border-light);
-                      border-radius:12px; padding:32px;
-                      text-align:center; cursor:pointer;
-                      transition:all 0.2s; background:#fff;"
-               onclick="document.getElementById('csv-input').click()"
-               ondragover="event.preventDefault();
-                           this.style.borderColor='#16a34a';
-                           this.style.background='#f0fdf4';"
-               ondragleave="this.style.borderColor='var(--border-light)';
-                            this.style.background='#fff';"
-               ondrop="handleDrop(event)">
+     style="border:2px dashed var(--border-light);
+            border-radius:12px; padding:32px;
+            text-align:center; cursor:pointer;
+            transition:all 0.2s; background:#fff;"
+     onclick="document.getElementById('id_csv_file').click()"
+     ondragover="event.preventDefault();
+                 this.style.borderColor='#16a34a';
+                 this.style.background='#f0fdf4';"
+     ondragleave="this.style.borderColor='var(--border-light)';
+                  this.style.background='#fff';"
+     ondrop="handleDrop(event)">
             <i class="fa fa-cloud-upload-alt"
                style="font-size:2rem; color:#86efac;
                       display:block; margin-bottom:10px;"></i>

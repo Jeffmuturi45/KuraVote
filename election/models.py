@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.core.validators import FileExtensionValidator
 from django.utils import timezone
+from django.db.models import Count
 
 # Create your models here.
 
@@ -24,7 +25,7 @@ class StudentManager(BaseUserManager):
 
 class Student(AbstractBaseUser, PermissionsMixin):
     admission_number = models.IntegerField(unique=True)
-    name = models.CharField(max_length=100)
+    first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
 
@@ -36,7 +37,7 @@ class Student(AbstractBaseUser, PermissionsMixin):
     objects = StudentManager()
 
     USERNAME_FIELD = 'admission_number'
-    REQUIRED_FIELDS = ['name', 'last_name', 'email']
+    REQUIRED_FIELDS = ['first_name', 'last_name', 'email']
 
     class Meta:
         db_table = 'students'
@@ -48,10 +49,10 @@ class Student(AbstractBaseUser, PermissionsMixin):
         ]
 
     def get_full_name(self):
-        return f"{self.name} {self.last_name}"
+        return f"{self.first_name} {self.last_name}"
 
     def get_initials(self):
-        return f"{self.name[0].upper()}{self.last_name[0].upper()}"
+        return f"{self.first_name[0].upper()}{self.last_name[0].upper()}"
 
     AVATAR_COLORS = [
         '#1a3a5c', '#0f766e', '#7c3aed',
@@ -99,6 +100,11 @@ class Election(models.Model):
     STATUS_ACTIVE = 'active'
     STATUS_INACTIVE = 'inactive'
     STATUS_CLOSED = 'closed'
+    announcement = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Optional message shown to students on their dashboard'
+    )
 
     STATUS_CHOICES = [
         (STATUS_ACTIVE, 'Active'),
@@ -174,26 +180,28 @@ class Position(models.Model):
 
 
 class Candidate(models.Model):
-    # lets define FKs
+
     student = models.ForeignKey(
         Student,
         on_delete=models.CASCADE,
-        related_name='candidatures')
-
+        related_name='candidatures'
+    )
     position = models.ForeignKey(
         Position,
         on_delete=models.CASCADE,
-        related_name='candidates')
-
-    manifesto = models.TextField(blank=True, max_length=500)
+        related_name='candidates'
+    )
+    manifesto = models.TextField(max_length=500, blank=True)
     photo = models.ImageField(
         upload_to='candidates/',
-        validators=[FileExtensionValidator(
-            allowed_extensions=['jpg', 'jpeg', 'png'])],
         blank=True,
-        null=True
+        null=True,
+        validators=[
+            FileExtensionValidator(
+                allowed_extensions=['jpg', 'jpeg', 'png']
+            )
+        ]
     )
-
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -207,7 +215,6 @@ class Candidate(models.Model):
         ]
         unique_together = ('student', 'position')
 
-    # ← back to class level (4 spaces, not 8)
     def has_photo(self):
         return bool(self.photo and self.photo.name)
 
@@ -223,28 +230,16 @@ class Candidate(models.Model):
 
     @property
     def vote_percentage(self):
-        total = self.position.total_votes
+        total = Vote.objects.filter(position=self.position).count()
         if total == 0:
             return 0
         return round((self.vote_count / total) * 100, 1)
 
     def __str__(self):
-        return f"{self.student.get_full_name()} → {self.position.position_name}"
-        # helper properties
-
-    @property
-    def vote_count(self):
-        return self.vote_set.count()
-
-    @property
-    def vote_percentage(self):
-        total = self.position.total_votes
-        if total == 0:
-            return 0
-        return round((self.vote_count / total) * 100, 1)
-
-    def __str__(self):
-        return f"{self.student.get_full_name()} for {self.position.position_name}"
+        return (
+            f"{self.student.get_full_name()} "
+            f"→ {self.position.position_name}"
+        )
 
 
 class Vote(models.Model):

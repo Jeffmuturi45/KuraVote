@@ -16,23 +16,24 @@ Student = get_user_model()
 
 
 class AdmissionNumberBackend(BaseBackend):
-    def authenticate(self, request, username=None, password=None, **kwargs):
-        # Try to find a student with the given admission number
+
+    def authenticate(self, request, username=None,
+                     password=None, **kwargs):
         try:
             admission_number = int(username)
-            student = Student.objects.get(admission_number=admission_number)
+            student = Student.objects.get(
+                admission_number=admission_number
+            )
         except (ValueError, TypeError, Student.DoesNotExist):
             return None
 
-        # checking if account is active
+        # ── Block deactivated accounts at login ───────────
         if not student.is_active:
             return None
 
-        # veify the password
         if student.check_password(password):
             return student
 
-        # if wrong password
         return None
 
     def get_user(self, user_id):

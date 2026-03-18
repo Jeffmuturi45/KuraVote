@@ -1,0 +1,79 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — Delete Student{% endblock %}
+{% block nav_students %}active{% endblock %}
+{% block page_title %}Delete Student{% endblock %}
+{% block page_title_2 %}Delete Student{% endblock %}
+
+{% block admin_content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-5">
+    <div class="delete-card">
+
+      <div style="width:64px; height:64px; border-radius:50%;
+                  background:#fef2f2; display:flex;
+                  align-items:center; justify-content:center;
+                  margin:0 auto 16px;">
+        <i class="fa fa-user-times"
+           style="font-size:1.6rem; color:#dc2626;"></i>
+      </div>
+
+      <h5 style="font-family:'Sora',sans-serif; color:#dc2626;
+                 margin-bottom:8px;">
+        Delete Student
+      </h5>
+
+      <div style="background:#f0fdf4; border-radius:12px;
+                  padding:14px; margin:16px 0 20px;
+                  display:flex; align-items:center;
+                  gap:12px; text-align:left;">
+        <div style="width:42px; height:42px; border-radius:50%;
+                    background:{{ student.get_avatar_color }};
+                    display:flex; align-items:center;
+                    justify-content:center; color:#fff;
+                    font-family:'Sora',sans-serif; font-weight:700;
+                    flex-shrink:0;">
+          {{ student.get_initials }}
+        </div>
+        <div>
+          <div style="font-weight:700; color:#1e293b;">
+            {{ student.get_full_name }}
+          </div>
+          <div style="font-size:12px; color:#94a3b8;">
+            Adm: {{ student.admission_number }}
+            &nbsp;·&nbsp; {{ student.email }}
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fef2f2; border-radius:10px;
+                  padding:12px 14px; margin-bottom:24px;
+                  font-size:12px; color:#991b1b;">
+        <i class="fa fa-exclamation-circle me-1"></i>
+        All votes cast by this student will also be deleted.
+        This action cannot be undone.
+      </div>
+
+      <div class="d-flex gap-2 justify-content-center">
+        <form method="POST">
+          {% csrf_token %}
+          <button type="submit"
+                  class="btn-kura"
+                  style="background:#dc2626; padding:10px 24px;">
+            <i class="fa fa-trash me-1"></i>
+            Yes, Delete
+          </button>
+        </form>
+        <a href="{% url 'admin_students' %}"
+           class="btn-kura-outline"
+           style="padding:10px 24px;">
+          Cancel
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}

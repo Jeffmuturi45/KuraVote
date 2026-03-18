@@ -106,11 +106,18 @@ class CandidateAdmin(admin.ModelAdmin):
 
     def get_full_name(self, obj):
         return obj.student.get_full_name()
+
     get_full_name.short_description = 'Candidate Name'
 
     def get_election(self, obj):
         return obj.position.election.election_name
+
     get_election.short_description = 'Election'
+
+    def get_vote_count(self, obj):
+        return obj.vote_count
+
+    get_vote_count.short_description = 'Votes'
 
     def photo_preview(self, obj):
         if obj.has_photo():
@@ -131,7 +138,7 @@ class CandidateAdmin(admin.ModelAdmin):
 
     list_display = [
         'get_full_name', 'position', 'get_election',
-        'photo_preview', 'vote_count', 'created_at'
+        'photo_preview', 'get_vote_count', 'created_at'
     ]
 
 
