@@ -95,12 +95,39 @@
         </div>
 
         <button type="submit"
-                class="btn-kura"
-                id="upload-btn"
-                style="padding:10px 28px;">
-          <i class="fa fa-upload me-1"></i>
-          Upload Students
-        </button>
+        class="btn-kura"
+        id="upload-btn"
+        style="padding:10px 28px;">
+  <i class="fa fa-upload me-1"></i>
+  Upload Students
+</button>
+
+<div id="upload-progress"
+     style="display:none; margin-top:16px;">
+  <div style="background:#f0fdf4; border:1px solid #bbf7d0;
+              border-radius:10px; padding:16px;">
+    <div style="display:flex; align-items:center; gap:10px;
+                margin-bottom:10px;">
+      <div class="spinner-border spinner-border-sm"
+           style="color:#16a34a;"></div>
+      <div style="font-size:13px; font-weight:600;
+                  color:#166534;" id="upload-status">
+        Reading file...
+      </div>
+    </div>
+    <div style="background:#d1fae5; border-radius:4px;
+                height:6px; overflow:hidden;">
+      <div id="upload-bar"
+           style="height:100%; background:#16a34a;
+                  border-radius:4px; width:0%;
+                  transition:width 0.5s ease;">
+      </div>
+    </div>
+    <div style="font-size:11px; color:#94a3b8; margin-top:8px;">
+      Please wait — do not close or refresh this page.
+    </div>
+  </div>
+</div>
 
       </form>
     </div>
@@ -197,12 +224,14 @@
 
 {% block extra_js %}
 <script>
-  const input    = document.getElementById('csv-input') ||
-                   document.getElementById('id_csv_file');
+  const input    = document.getElementById('id_csv_file');
   const dropZone = document.getElementById('drop-zone');
   const fileName = document.getElementById('file-name');
   const form     = document.getElementById('csv-form');
   const uploadBtn= document.getElementById('upload-btn');
+  const progress = document.getElementById('upload-progress');
+  const status   = document.getElementById('upload-status');
+  const bar      = document.getElementById('upload-bar');
 
   if (input) {
     input.addEventListener('change', function () {
@@ -222,8 +251,10 @@
 
   function showFileName(file) {
     if (file) {
-      fileName.textContent = file.name + ' (' +
-        (file.size / 1024).toFixed(1) + ' KB)';
+      const size = file.size > 1024 * 1024
+        ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+        : (file.size / 1024).toFixed(1) + ' KB';
+      fileName.textContent = file.name + ' (' + size + ')';
       fileName.style.display = 'block';
       dropZone.style.borderColor = '#16a34a';
       dropZone.style.background  = '#f0fdf4';
@@ -236,6 +267,33 @@
       uploadBtn.innerHTML =
         '<span class="spinner-border spinner-border-sm me-2"></span>'
         + 'Uploading...';
+
+      // Show progress UI
+      progress.style.display = 'block';
+
+      // Animate progress bar to simulate stages
+      let pct = 0;
+
+      // Stage 1 — reading file (0-20%)
+      setTimeout(function() {
+        pct = 20;
+        bar.style.width = pct + '%';
+        status.textContent = 'Parsing CSV rows...';
+      }, 300);
+
+      // Stage 2 — processing rows (20-60%)
+      setTimeout(function() {
+        pct = 60;
+        bar.style.width = pct + '%';
+        status.textContent = 'Checking for duplicates...';
+      }, 1000);
+
+      // Stage 3 — writing to DB (60-90%)
+      setTimeout(function() {
+        pct = 90;
+        bar.style.width = pct + '%';
+        status.textContent = 'Writing to database...';
+      }, 2000);
     });
   }
 </script>

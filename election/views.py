@@ -827,7 +827,14 @@ def admin_upload_csv(request):
             decoded = csv_file.read().decode('utf-8')
             reader = csv.DictReader(io.StringIO(decoded))
 
-            created = 0
+            # Get all existing admission numbers in one query
+            existing_admissions = set(
+                Student.objects.values_list(
+                    'admission_number', flat=True
+                )
+            )
+
+            to_create = []
             skipped = 0
             errors = []
 
@@ -840,12 +847,15 @@ def admin_upload_csv(request):
                     last_name = row['last_name'].strip()
                     email = row['email'].strip()
 
-                    if Student.objects.filter(
-                        admission_number=admission_number
-                    ).exists():
+                    if admission_number in existing_admissions:
                         skipped += 1
                         continue
 
+                    # Mark as seen to catch duplicates within
+                    # the CSV itself
+                    existing_admissions.add(admission_number)
+
+                    # Create student object but don't save yet
                     student = Student(
                         admission_number=admission_number,
                         first_name=first_name,
@@ -854,14 +864,29 @@ def admin_upload_csv(request):
                         password_changed=False,
                         is_active=True,
                     )
+                    # Hash the password manually
                     student.set_password(str(admission_number))
-                    student.save()
-                    created += 1
+                    to_create.append(student)
 
                 except (KeyError, ValueError) as e:
                     errors.append(f'Row {row_num}: {str(e)}')
                 except Exception as e:
                     errors.append(f'Row {row_num}: {str(e)}')
+
+            # ── Single bulk insert — all rows at once ──────
+            created = 0
+            if to_create:
+                try:
+                    # batch_size=1000 sends rows in chunks of 1000
+                    # preventing memory issues on huge files
+                    Student.objects.bulk_create(
+                        to_create,
+                        batch_size=1000,
+                        ignore_conflicts=True
+                    )
+                    created = len(to_create)
+                except Exception as e:
+                    errors.append(f'Bulk insert error: {str(e)}')
 
             if created > 0:
                 messages.success(

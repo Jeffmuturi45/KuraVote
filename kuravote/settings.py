@@ -205,6 +205,9 @@ CACHES = {
 }
 
 
-# ─── File Upload Limits ──────────────────────────────────
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880    # 5MB max upload size
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5242880    # 5MB max file size
+# File upload limits — increase for large CSVs
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520   # 20MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 20971520   # 20MB
+
+# Increase timeout for large uploads
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10240
