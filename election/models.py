@@ -172,6 +172,7 @@ class Position(models.Model):
     def total_votes(self):
         return Vote.objects.filter(position=self).count()
 
+    @property
     def total_candidates(self):
         return self.candidates.count()
 
@@ -283,9 +284,10 @@ class Vote(models.Model):
             f"({self.position.position_name})"
         )
 
+
 class Notification(models.Model):
 
-    TYPE_INFO    = 'info'
+    TYPE_INFO = 'info'
     TYPE_SUCCESS = 'success'
     TYPE_WARNING = 'warning'
 
@@ -295,25 +297,25 @@ class Notification(models.Model):
         (TYPE_WARNING, 'Warning'),
     ]
 
-    student     = models.ForeignKey(
-                      Student,
-                      on_delete=models.CASCADE,
-                      related_name='notifications'
-                  )
-    title       = models.CharField(max_length=100)
-    message     = models.TextField()
-    notif_type  = models.CharField(
-                      max_length=10,
-                      choices=TYPE_CHOICES,
-                      default=TYPE_INFO
-                  )
-    is_read     = models.BooleanField(default=False)
-    created_at  = models.DateTimeField(default=timezone.now)
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+    title = models.CharField(max_length=100)
+    message = models.TextField()
+    notif_type = models.CharField(
+        max_length=10,
+        choices=TYPE_CHOICES,
+        default=TYPE_INFO
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        db_table  = 'notifications'
-        ordering  = ['-created_at']
-        indexes   = [
+        db_table = 'notifications'
+        ordering = ['-created_at']
+        indexes = [
             models.Index(fields=['student', 'is_read']),
         ]
 
