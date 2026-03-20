@@ -15,6 +15,16 @@ urlpatterns = [
         name='login'
     ),
     path(
+        'notifications/',
+        views.student_notifications,
+        name='student_notifications'
+    ),
+    path(
+        'notifications/api/',
+        views.notifications_api,
+        name='notifications_api'
+    ),
+    path(
         'logout/',
         views.logout_view,
         name='logout'

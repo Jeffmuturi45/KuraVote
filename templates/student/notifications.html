@@ -1,0 +1,91 @@
+{% extends 'student/base_student.html' %}
+
+{% block title %}KuraVote — Notifications{% endblock %}
+{% block nav_notifications %}active{% endblock %}
+
+{% block student_content %}
+<div class="px-3 pt-3 content-pad">
+
+  <div class="mb-4 d-flex align-items-center
+              justify-content-between">
+    <div>
+      <h5 style="font-family:'Sora',sans-serif;
+                 color:#166534; margin-bottom:2px;">
+        Notifications
+      </h5>
+      <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
+        {{ notifications.count }}
+        notification{{ notifications.count|pluralize }}
+      </p>
+    </div>
+  </div>
+
+  {% if notifications %}
+    {% for notif in notifications %}
+      <div style="background:#fff; border-radius:14px;
+                  border:1.5px solid
+                  {% if notif.notif_type == 'success' %}#86efac
+                  {% elif notif.notif_type == 'warning' %}#fde68a
+                  {% else %}#bbf7d0{% endif %};
+                  padding:16px; margin-bottom:10px;
+                  display:flex; align-items:flex-start; gap:12px;">
+
+        <!-- Icon -->
+        <div style="width:38px; height:38px; border-radius:10px;
+                    flex-shrink:0; display:flex;
+                    align-items:center; justify-content:center;
+                    font-size:1rem;
+                    background:
+                    {% if notif.notif_type == 'success' %}#f0fdf4
+                    {% elif notif.notif_type == 'warning' %}#fefce8
+                    {% else %}#f0fdf4{% endif %};">
+          <i class="fa
+             {% if notif.notif_type == 'success' %}fa-check-circle
+             {% elif notif.notif_type == 'warning' %}fa-exclamation-circle
+             {% else %}fa-info-circle{% endif %}"
+             style="color:
+             {% if notif.notif_type == 'success' %}#16a34a
+             {% elif notif.notif_type == 'warning' %}#eab308
+             {% else %}#16a34a{% endif %};"></i>
+        </div>
+
+        <!-- Content -->
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:0.88rem; font-weight:700;
+                      color:#1e293b; margin-bottom:4px;">
+            {{ notif.title }}
+          </div>
+          <div style="font-size:0.8rem; color:#64748b;
+                      line-height:1.5; margin-bottom:6px;">
+            {{ notif.message }}
+          </div>
+          <div style="font-size:0.7rem; color:#94a3b8;">
+            <i class="fa fa-clock me-1"></i>
+            {{ notif.created_at|timesince }} ago
+          </div>
+        </div>
+
+      </div>
+    {% endfor %}
+
+  {% else %}
+    <div style="text-align:center; padding:48px 20px;">
+      <div style="width:72px; height:72px; border-radius:50%;
+                  background:#f0fdf4; display:flex;
+                  align-items:center; justify-content:center;
+                  margin:0 auto 16px;">
+        <i class="fa fa-bell-slash"
+           style="font-size:1.8rem; color:#86efac;"></i>
+      </div>
+      <h6 style="font-family:'Sora',sans-serif; color:#166534;">
+        No Notifications Yet
+      </h6>
+      <p style="font-size:0.82rem; color:#94a3b8;">
+        You will be notified when an election starts,
+        when you vote, and when results are announced.
+      </p>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

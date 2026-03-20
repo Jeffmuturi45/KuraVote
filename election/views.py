@@ -14,6 +14,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.core.cache import cache
+from .utils import create_notification, create_bulk_notifications
 
 from .models import Student, Election, Position, Candidate, Vote
 from .forms import (
@@ -827,7 +828,6 @@ def admin_upload_csv(request):
             decoded = csv_file.read().decode('utf-8')
             reader = csv.DictReader(io.StringIO(decoded))
 
-            # Get all existing admission numbers in one query
             existing_admissions = set(
                 Student.objects.values_list(
                     'admission_number', flat=True
@@ -837,6 +837,7 @@ def admin_upload_csv(request):
             to_create = []
             skipped = 0
             errors = []
+            seen_in_csv = set()
 
             for row_num, row in enumerate(reader, start=2):
                 try:
@@ -851,42 +852,50 @@ def admin_upload_csv(request):
                         skipped += 1
                         continue
 
-                    # Mark as seen to catch duplicates within
-                    # the CSV itself
-                    existing_admissions.add(admission_number)
+                    if admission_number in seen_in_csv:
+                        skipped += 1
+                        continue
 
-                    # Create student object but don't save yet
-                    student = Student(
+                    seen_in_csv.add(admission_number)
+
+                    from django.contrib.auth.hashers import make_password
+                    to_create.append(Student(
                         admission_number=admission_number,
                         first_name=first_name,
                         last_name=last_name,
                         email=email,
+                        password=make_password(
+                            str(admission_number)
+                        ),
                         password_changed=False,
                         is_active=True,
-                    )
-                    # Hash the password manually
-                    student.set_password(str(admission_number))
-                    to_create.append(student)
+                        is_staff=False,
+                        is_superuser=False,
+                    ))
 
-                except (KeyError, ValueError) as e:
+                except KeyError as e:
+                    errors.append(
+                        f'Row {row_num}: Missing column {str(e)}. '
+                        f'Headers must be exactly: '
+                        f'admission_number, first_name, '
+                        f'last_name, email'
+                    )
+                except ValueError as e:
                     errors.append(f'Row {row_num}: {str(e)}')
                 except Exception as e:
                     errors.append(f'Row {row_num}: {str(e)}')
 
-            # ── Single bulk insert — all rows at once ──────
             created = 0
             if to_create:
                 try:
-                    # batch_size=1000 sends rows in chunks of 1000
-                    # preventing memory issues on huge files
-                    Student.objects.bulk_create(
+                    result = Student.objects.bulk_create(
                         to_create,
-                        batch_size=1000,
+                        batch_size=500,
                         ignore_conflicts=True
                     )
-                    created = len(to_create)
+                    created = len(result)
                 except Exception as e:
-                    errors.append(f'Bulk insert error: {str(e)}')
+                    errors.append(f'Import error: {str(e)}')
 
             if created > 0:
                 messages.success(
@@ -897,10 +906,16 @@ def admin_upload_csv(request):
                 messages.warning(
                     request,
                     f'{skipped} student(s) skipped — '
-                    f'admission numbers already exist.'
+                    f'already exist or duplicates in CSV.'
                 )
-            for error in errors:
+            for error in errors[:5]:
                 messages.error(request, error)
+            if len(errors) > 5:
+                messages.error(
+                    request,
+                    f'...and {len(errors) - 5} more errors. '
+                    f'Check your CSV format.'
+                )
 
             return redirect('admin_students')
 
@@ -1465,3 +1480,57 @@ def admin_active_users_api(request):
 @staff_member_required(login_url='login')
 def admin_settings(request):
     return render(request, 'admin/settings.html')
+
+
+@login_required(login_url='login')
+def student_notifications(request):
+
+    if request.user.is_staff:
+        return redirect('admin_dashboard')
+
+    notifications = request.user.notifications.all()
+
+    # Mark all as read when page is opened
+    request.user.notifications.filter(
+        is_read=False
+    ).update(is_read=True)
+
+    context = {
+        'notifications': notifications,
+    }
+    return render(
+        request,
+        'student/notifications.html',
+        context
+    )
+
+
+@login_required(login_url='login')
+def notifications_api(request):
+    if request.user.is_staff:
+        return JsonResponse({'count': 0, 'notifications': []})
+
+    unread = request.user.notifications.filter(
+        is_read=False
+    ).values(
+        'id', 'title', 'message',
+        'notif_type', 'created_at'
+    )[:10]
+
+    return JsonResponse({
+        'count':         request.user.notifications.filter(
+            is_read=False
+        ).count(),
+        'notifications': [
+            {
+                'id':         n['id'],
+                'title':      n['title'],
+                'message':    n['message'],
+                'type':       n['notif_type'],
+                'created_at': n['created_at'].strftime(
+                    '%d %b %Y, %H:%M'
+                ),
+            }
+            for n in unread
+        ],
+    })

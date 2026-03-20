@@ -78,15 +78,14 @@ class CSVUploadForm(forms.Form):
     def clean_csv_file(self):
         file = self.cleaned_data['csv_file']
 
-        # Must be a .csv file
         if not file.name.endswith('.csv'):
             raise forms.ValidationError(
                 'Invalid file type. Please upload a .csv file only.'
             )
-        # Max file size 5MB
-        if file.size > 5 * 1024 * 1024:
+        # Increase to 20MB for large school CSVs
+        if file.size > 20 * 1024 * 1024:
             raise forms.ValidationError(
-                'File too large. Maximum size is 5MB.'
+                'File too large. Maximum size is 20MB.'
             )
         return file
 

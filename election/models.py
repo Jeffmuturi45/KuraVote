@@ -282,3 +282,40 @@ class Vote(models.Model):
             f"{self.candidate.student.get_full_name()} "
             f"({self.position.position_name})"
         )
+
+class Notification(models.Model):
+
+    TYPE_INFO    = 'info'
+    TYPE_SUCCESS = 'success'
+    TYPE_WARNING = 'warning'
+
+    TYPE_CHOICES = [
+        (TYPE_INFO,    'Info'),
+        (TYPE_SUCCESS, 'Success'),
+        (TYPE_WARNING, 'Warning'),
+    ]
+
+    student     = models.ForeignKey(
+                      Student,
+                      on_delete=models.CASCADE,
+                      related_name='notifications'
+                  )
+    title       = models.CharField(max_length=100)
+    message     = models.TextField()
+    notif_type  = models.CharField(
+                      max_length=10,
+                      choices=TYPE_CHOICES,
+                      default=TYPE_INFO
+                  )
+    is_read     = models.BooleanField(default=False)
+    created_at  = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table  = 'notifications'
+        ordering  = ['-created_at']
+        indexes   = [
+            models.Index(fields=['student', 'is_read']),
+        ]
+
+    def __str__(self):
+        return f'{self.student.get_full_name()} — {self.title}'

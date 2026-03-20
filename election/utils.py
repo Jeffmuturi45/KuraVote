@@ -36,3 +36,28 @@ def active_election(request):
         'active_election':    election,
         'active_users_count': len(get_active_users()),
     }
+
+
+def create_notification(student, title, message,
+                        notif_type='info'):
+    from .models import Notification
+    Notification.objects.create(
+        student=student,
+        title=title,
+        message=message,
+        notif_type=notif_type,
+    )
+
+
+def create_bulk_notifications(students, title,
+                              message, notif_type='info'):
+    from .models import Notification
+    Notification.objects.bulk_create([
+        Notification(
+            student=s,
+            title=title,
+            message=message,
+            notif_type=notif_type,
+        )
+        for s in students
+    ], batch_size=500)
