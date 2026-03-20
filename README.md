@@ -11,7 +11,7 @@
 ![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-166534?style=flat-square&logo=bootstrap&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11-166534?style=flat-square&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-eab308?style=flat-square)
-![CI](https://github.com/YOUR_USERNAME/kuravote/actions/workflows/django.yml/badge.svg)
+![CI](https://github.com/Jeffmuturi45/kuravote/actions/workflows/django.yml/badge.svg)
 
 [Features](#features) •
 [Screenshots](#screenshots) •
