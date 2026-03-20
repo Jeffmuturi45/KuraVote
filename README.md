@@ -11,6 +11,7 @@
 ![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-166534?style=flat-square&logo=bootstrap&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11-166534?style=flat-square&logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-eab308?style=flat-square)
+![CI](https://github.com/Jeffmuturi45/kuravote/actions/workflows/django.yml/badge.svg)
 
 [Features](#features) •
 [Screenshots](#screenshots) •
@@ -254,7 +255,7 @@ MIT License — feel free to use, modify, and distribute.
 ---
 
 <div align="center">
-Made with ❤️ in Kenya 🇰🇪
+Made by Jeff Muturi.
 <br>
 <strong>KuraVote</strong> — Your voice, your choice.
 </div>

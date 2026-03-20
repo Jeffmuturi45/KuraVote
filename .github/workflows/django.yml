@@ -1,0 +1,100 @@
+name: KuraVote CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Build & Test Django
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_DATABASE:      kuravote_test_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+
+      # ── 1. Checkout code ────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ─────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # ── 3. Install dependencies ──────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── 4. Create .env for CI ────────────────────────────
+      - name: Create environment file
+        run: |
+          cat > .env << EOF
+          SECRET_KEY=ci-test-secret-key-not-for-production
+          DEBUG=True
+          DB_NAME=kuravote_test_db
+          DB_USER=root
+          DB_PASSWORD=testpassword
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          EOF
+
+      # ── 5. Wait for MySQL to be ready ────────────────────
+      - name: Wait for MySQL
+        run: |
+          sudo apt-get install -y default-mysql-client
+          until mysqladmin ping -h 127.0.0.1 \
+            -u root -ptestpassword --silent; do
+            echo "Waiting for MySQL..."
+            sleep 3
+          done
+          echo "MySQL is ready."
+
+      # ── 6. Run Django system checks ──────────────────────
+      - name: Django system check
+        run: python manage.py check
+        env:
+          DJANGO_SETTINGS_MODULE: kuravote.settings
+
+      # ── 7. Run migrations ────────────────────────────────
+      - name: Run migrations
+        run: python manage.py migrate --noinput
+        env:
+          DJANGO_SETTINGS_MODULE: kuravote.settings
+
+      # ── 8. Run tests ─────────────────────────────────────
+      - name: Run tests
+        run: python manage.py test election --verbosity=2
+        env:
+          DJANGO_SETTINGS_MODULE: kuravote.settings
+
+      # ── 9. Check for missing migrations ──────────────────
+      - name: Check for missing migrations
+        run: |
+          python manage.py makemigrations --check --dry-run
+        env:
+          DJANGO_SETTINGS_MODULE: kuravote.settings
+
+      # ── 10. Collect static files ─────────────────────────
+      - name: Collect static files
+        run: python manage.py collectstatic --noinput
+        env:
+          DJANGO_SETTINGS_MODULE: kuravote.settings
