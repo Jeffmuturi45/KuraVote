@@ -129,6 +129,8 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 8},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -154,11 +156,41 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 # ─── Session Security ────────────────────────────────────
-SESSION_COOKIE_AGE = 3600        # 1 hour timeout
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True    # ends when browser closes
-SESSION_COOKIE_HTTPONLY = True        # JS cannot access cookie
-SESSION_COOKIE_SECURE = False       # set True when HTTPS is live
-SESSION_SAVE_EVERY_REQUEST = True        # resets timeout on activity
+SESSION_COOKIE_AGE = 3600
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_SAVE_EVERY_REQUEST = True
+
+# Set these properly based on environment
+SESSION_COOKIE_SECURE = not DEBUG          # True in production
+CSRF_COOKIE_SECURE = not DEBUG
+
+# ─── Security Headers ────────────────────────────────────
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
+X_FRAME_OPTIONS = 'DENY'
+
+# ─── Content Security Policy (add django-csp to requirements) ──
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+)
+CSP_STYLE_SRC = (
+    "'self'",
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+    "https://fonts.googleapis.com",
+    "'unsafe-inline'",     # Bootstrap requires this; tighten later
+)
+CSP_FONT_SRC = ("'self'", "https://fonts.gstatic.com")
+CSP_IMG_SRC = ("'self'", "data:")
+CSP_FRAME_ANCESTORS = ("'none'",)
 
 
 # ─── Security Headers ────────────────────────────────────

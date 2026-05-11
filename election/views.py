@@ -1,4 +1,3 @@
-from .utils import get_active_users
 import json
 import csv
 import io
@@ -14,7 +13,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.core.cache import cache
-from .utils import create_notification, create_bulk_notifications
+from django.contrib.auth.hashers import make_password
 
 from .models import Student, Election, Position, Candidate, Vote
 from .forms import (
@@ -22,20 +21,37 @@ from .forms import (
     CSVUploadForm, ElectionForm, PositionForm,
     CandidateForm, StudentPasswordChangeForm
 )
+from .utils import (
+    get_active_users,
+    create_notification,
+    create_bulk_notifications
+)
 
 
 # ═══════════════════════════════════════════════
 # AUTH VIEWS
 # ═══════════════════════════════════════════════
+
+LOCKOUT_ATTEMPTS = 5
+LOCKOUT_WINDOW = 60  # seconds
+
+
 def login_view(request):
 
-    # ── Manual rate limiting — 5 attempts per IP per minute ──
+    if request.user.is_authenticated:
+        if request.user.is_staff:
+            return redirect('admin_dashboard')
+        return redirect('student_dashboard')
+
+    form = StudentLoginForm()
+
     if request.method == 'POST':
         ip = request.META.get('REMOTE_ADDR', 'unknown')
         cache_key = f'login_attempts_{ip}'
         attempts = cache.get(cache_key, 0)
 
-        if attempts >= 5:
+        # ── Rate limit check ──────────────────────────────
+        if attempts >= LOCKOUT_ATTEMPTS:
             messages.error(
                 request,
                 'Too many login attempts. '
@@ -47,18 +63,6 @@ def login_view(request):
                 {'form': StudentLoginForm()}
             )
 
-        # Increment attempt counter — expires after 60 seconds
-        cache.set(cache_key, attempts + 1, timeout=60)
-
-    # Already logged in — redirect appropriately
-    if request.user.is_authenticated:
-        if request.user.is_staff:
-            return redirect('admin_dashboard')
-        return redirect('student_dashboard')
-
-    form = StudentLoginForm()
-
-    if request.method == 'POST':
         form = StudentLoginForm(request.POST)
         if form.is_valid():
             admission_number = form.cleaned_data['admission_number']
@@ -71,16 +75,22 @@ def login_view(request):
             )
 
             if user is not None:
-                # Reset attempts on successful login
-                cache.delete(
-                    f'login_attempts_{request.META.get("REMOTE_ADDR", "unknown")}')
+                # ── Success — clear lockout ───────────────
+                cache.delete(cache_key)
                 login(request, user)
                 messages.success(
                     request,
                     f'Welcome back, {user.first_name}!'
                 )
                 return redirect('student_dashboard')
+
             else:
+                # ── Failed — increment counter ────────────
+                cache.set(
+                    cache_key,
+                    attempts + 1,
+                    timeout=LOCKOUT_WINDOW
+                )
                 try:
                     student = Student.objects.get(
                         admission_number=admission_number
@@ -94,13 +104,13 @@ def login_view(request):
                     else:
                         messages.error(
                             request,
-                            'Invalid admission number or password. Please try again.'
+                            'Incorrect password. Please try again.'
                         )
                 except Student.DoesNotExist:
                     messages.error(
                         request,
                         'You are not a registered voter. '
-                        'Please register with the admin.'
+                        'Please contact the administrator.'
                     )
 
     return render(request, 'student/login.html', {'form': form})
@@ -108,6 +118,7 @@ def login_view(request):
 
 def logout_view(request):
     if request.user.is_authenticated:
+        # Remove from active users tracker
         cache.delete(f'active_user_{request.user.id}')
         active_ids = cache.get('active_user_ids', set())
         active_ids.discard(request.user.id)
@@ -146,6 +157,16 @@ def change_password_view(request):
             )
             if user:
                 login(request, user)
+                create_notification(
+                    student=user,
+                    title='Password Changed',
+                    message=(
+                        'Your password has been changed successfully. '
+                        'If you did not make this change, contact '
+                        'the administrator immediately.'
+                    ),
+                    notif_type='info',
+                )
 
             messages.success(
                 request,
@@ -184,13 +205,11 @@ def student_dashboard(request):
             ).values_list('position_id', flat=True)
         )
 
-    # Show deactivation warning
     if not request.user.is_active:
         messages.warning(
             request,
             'Your account has been deactivated. '
-            'You cannot vote in this election. '
-            'Please contact the administrator.'
+            'You cannot vote. Please contact the administrator.'
         )
 
     context = {
@@ -208,7 +227,6 @@ def ballot_view(request):
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
-    # ── Block deactivated students ────────────────────────
     if not request.user.is_active:
         messages.error(
             request,
@@ -217,7 +235,6 @@ def ballot_view(request):
         )
         return redirect('student_dashboard')
 
-    # Get active election
     try:
         election = Election.objects.get(status=Election.STATUS_ACTIVE)
     except Election.DoesNotExist:
@@ -273,7 +290,6 @@ def cast_vote(request):
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
-    # ── Block deactivated students ────────────────────────
     if not request.user.is_active:
         messages.error(
             request,
@@ -284,8 +300,6 @@ def cast_vote(request):
 
     if request.method != 'POST':
         return redirect('ballot')
-
-    # ... rest of the view stays the same
 
     try:
         election = Election.objects.get(status=Election.STATUS_ACTIVE)
@@ -312,7 +326,6 @@ def cast_vote(request):
 
     for position_id, candidate_id in selections.items():
         try:
-            # Wrap each vote in an atomic transaction
             with transaction.atomic():
                 position = Position.objects.get(
                     pk=position_id,
@@ -323,8 +336,6 @@ def cast_vote(request):
                     position=position
                 )
 
-                # Lock this student's row for this position
-                # prevents duplicate votes under concurrent requests
                 already_voted = Vote.objects.select_for_update().filter(
                     student=request.user,
                     position=position,
@@ -344,7 +355,7 @@ def cast_vote(request):
 
         except (Position.DoesNotExist, Candidate.DoesNotExist):
             errors.append('Invalid selection detected.')
-        except Exception as e:
+        except Exception:
             errors.append(
                 f'Could not save vote for position {position_id}.'
             )
@@ -356,6 +367,18 @@ def cast_vote(request):
             f'Your votes have been submitted successfully! '
             f'{saved} vote{plural} recorded.'
         )
+        # Notify student of successful vote
+        create_notification(
+            student=request.user,
+            title='Vote Submitted Successfully',
+            message=(
+                f'Your {saved} vote{plural} for '
+                f'"{election.election_name}" have been '
+                f'recorded securely. Thank you for participating!'
+            ),
+            notif_type='success',
+        )
+
     if errors:
         for error in errors:
             messages.error(request, error)
@@ -462,10 +485,62 @@ def student_profile(request):
     return render(request, 'student/profile.html', context)
 
 
+@login_required(login_url='login')
+def student_notifications(request):
+
+    if request.user.is_staff:
+        return redirect('admin_dashboard')
+
+    notifications = request.user.notifications.all()
+
+    request.user.notifications.filter(
+        is_read=False
+    ).update(is_read=True)
+
+    context = {
+        'notifications': notifications,
+    }
+    return render(
+        request,
+        'student/notifications.html',
+        context
+    )
+
+
+@login_required(login_url='login')
+def notifications_api(request):
+
+    if request.user.is_staff:
+        return JsonResponse({'count': 0, 'notifications': []})
+
+    unread = request.user.notifications.filter(
+        is_read=False
+    ).values(
+        'id', 'title', 'message', 'notif_type', 'created_at'
+    )[:10]
+
+    return JsonResponse({
+        'count': request.user.notifications.filter(
+            is_read=False
+        ).count(),
+        'notifications': [
+            {
+                'id':         n['id'],
+                'title':      n['title'],
+                'message':    n['message'],
+                'type':       n['notif_type'],
+                'created_at': n['created_at'].strftime(
+                    '%d %b %Y, %H:%M'
+                ),
+            }
+            for n in unread
+        ],
+    })
+
+
 # ═══════════════════════════════════════════════
 # ADMIN VIEWS
 # ═══════════════════════════════════════════════
-
 
 @staff_member_required(login_url='login')
 def admin_dashboard(request):
@@ -497,15 +572,15 @@ def admin_dashboard(request):
     active_users = get_active_users()
 
     context = {
-        'total_students':    total_students,
-        'total_elections':   total_elections,
-        'total_candidates':  total_candidates,
-        'active_election':   active_election,
-        'total_votes':       total_votes,
-        'voters_count':      voters_count,
-        'turnout':           turnout,
-        'recent_elections':  recent_elections,
-        'active_users':      active_users,
+        'total_students':     total_students,
+        'total_elections':    total_elections,
+        'total_candidates':   total_candidates,
+        'active_election':    active_election,
+        'total_votes':        total_votes,
+        'voters_count':       voters_count,
+        'turnout':            turnout,
+        'recent_elections':   recent_elections,
+        'active_users':       active_users,
         'active_users_count': len(active_users),
     }
     return render(request, 'admin/dashboard.html', context)
@@ -578,8 +653,25 @@ def admin_election_activate(request, pk):
             'Please close it before activating a new one.'
         )
         return redirect('admin_elections')
+
     election.status = Election.STATUS_ACTIVE
     election.save()
+
+    # Notify all active students
+    students = Student.objects.filter(
+        is_staff=False, is_active=True
+    )
+    create_bulk_notifications(
+        students=students,
+        title='Election Started',
+        message=(
+            f'"{election.election_name}" is now open for voting. '
+            f'Log in and cast your vote before '
+            f'{election.end_date.strftime("%d %B %Y at %I:%M %p")}.'
+        ),
+        notif_type='info',
+    )
+
     messages.success(
         request,
         f'"{election.election_name}" is now active. '
@@ -593,6 +685,22 @@ def admin_election_close(request, pk):
     election = get_object_or_404(Election, pk=pk)
     election.status = Election.STATUS_CLOSED
     election.save()
+
+    # Notify all active students
+    students = Student.objects.filter(
+        is_staff=False, is_active=True
+    )
+    create_bulk_notifications(
+        students=students,
+        title='Election Closed',
+        message=(
+            f'"{election.election_name}" has ended. '
+            f'Results are now available. '
+            f'Check the results page to see the outcome.'
+        ),
+        notif_type='warning',
+    )
+
     messages.success(
         request,
         f'"{election.election_name}" has been closed. '
@@ -817,7 +925,7 @@ def admin_students_delete_all(request):
     return redirect('admin_students')
 
 
-MAX_CSV_ROWS = 15_000  # one school realistically never exceeds this
+MAX_CSV_ROWS = 15000
 
 
 @staff_member_required(login_url='login')
@@ -841,17 +949,15 @@ def admin_upload_csv(request):
             skipped = 0
             errors = []
             seen_in_csv = set()
-            row_count = 0  # ── NEW: row counter ─────────────────────
+            row_count = 0
 
             for row_num, row in enumerate(reader, start=2):
-
-                # ── NEW: hard limit before processing each row ───────
                 row_count += 1
                 if row_count > MAX_CSV_ROWS:
                     messages.error(
                         request,
                         f'CSV exceeds {MAX_CSV_ROWS} rows. '
-                        'Split into smaller files and re-upload.'
+                        f'Split into smaller files and re-upload.'
                     )
                     return redirect('admin_students')
 
@@ -873,7 +979,6 @@ def admin_upload_csv(request):
 
                     seen_in_csv.add(admission_number)
 
-                    from django.contrib.auth.hashers import make_password
                     to_create.append(Student(
                         admission_number=admission_number,
                         first_name=first_name,
@@ -1052,7 +1157,6 @@ def admin_results_api(request, election_id):
         'positions':      data,
     }
 
-    # Cache for 5 seconds
     cache.set(cache_key, result, timeout=5)
     return JsonResponse(result)
 
@@ -1073,11 +1177,10 @@ def admin_reports(request, election_id):
             key=lambda c: c.vote_count,
             reverse=True
         )
-
         pos_total = Vote.objects.filter(position=position).count()
 
-        # Only declare winner if votes have been cast
-        if candidates and pos_total > 0 and candidates[0].vote_count > 0:
+        if candidates and pos_total > 0 \
+                and candidates[0].vote_count > 0:
             winner = candidates[0]
         else:
             winner = None
@@ -1115,7 +1218,6 @@ def export_pdf(request, election_id):
         Paragraph, Spacer
     )
     from reportlab.lib.styles import getSampleStyleSheet
-    from django.http import HttpResponse
 
     election = get_object_or_404(Election, pk=election_id)
     positions = Position.objects.filter(election=election)
@@ -1140,17 +1242,17 @@ def export_pdf(request, election_id):
     elements = []
     styles = getSampleStyleSheet()
 
-    # Title
     elements.append(
-        Paragraph('KuraVote — Official Election Results',
-                  styles['Title'])
+        Paragraph(
+            'KuraVote — Official Election Results',
+            styles['Title']
+        )
     )
     elements.append(
         Paragraph(election.election_name, styles['Heading2'])
     )
     elements.append(Spacer(1, 6))
 
-    # Summary
     total_students = Student.objects.filter(is_staff=False).count()
     voters_count = Vote.objects.filter(
         election=election
@@ -1176,33 +1278,25 @@ def export_pdf(request, election_id):
             key=lambda c: c.vote_count,
             reverse=True
         )
-
         pos_total = Vote.objects.filter(position=position).count()
 
-        # Determine winner
-        if candidates and pos_total > 0 \
-                and candidates[0].vote_count > 0:
-            winner = candidates[0]
-        else:
-            winner = None
+        winner = (
+            candidates[0]
+            if candidates and pos_total > 0
+            and candidates[0].vote_count > 0
+            else None
+        )
 
         elements.append(
             Paragraph(position.position_name, styles['Heading3'])
         )
-
-        if winner:
-            elements.append(
-                Paragraph(
-                    f'Winner: {winner.student.get_full_name()}',
-                    styles['Normal']
-                )
+        elements.append(
+            Paragraph(
+                f'Winner: {winner.student.get_full_name()}'
+                if winner else 'No votes cast.',
+                styles['Normal']
             )
-        else:
-            elements.append(
-                Paragraph('No votes cast for this position.',
-                          styles['Normal'])
-            )
-
+        )
         elements.append(Spacer(1, 8))
 
         table_data = [['#', 'Candidate', 'Adm No', 'Votes', '%']]
@@ -1215,33 +1309,24 @@ def export_pdf(request, election_id):
                 f'{c.vote_percentage}%',
             ])
 
-        table = Table(
-            table_data,
-            colWidths=[30, 180, 100, 60, 60]
-        )
+        table = Table(table_data, colWidths=[30, 180, 100, 60, 60])
         table.setStyle(TableStyle([
-            # Header
-            ('BACKGROUND',  (0, 0), (-1, 0),
+            ('BACKGROUND', (0, 0), (-1, 0),
              colors.HexColor('#166534')),
-            ('TEXTCOLOR',   (0, 0), (-1, 0),
-             colors.white),
-            ('FONTNAME',    (0, 0), (-1, 0),
-             'Helvetica-Bold'),
-            ('FONTSIZE',    (0, 0), (-1, 0), 10),
-            ('ALIGN',       (0, 0), (-1, 0), 'CENTER'),
-            # Winner row highlight
-            ('BACKGROUND',  (0, 1), (-1, 1),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE',   (0, 0), (-1, 0), 10),
+            ('ALIGN',      (0, 0), (-1, 0), 'CENTER'),
+            ('BACKGROUND', (0, 1), (-1, 1),
              colors.HexColor('#dcfce7')),
-            ('FONTNAME',    (0, 1), (-1, 1),
-             'Helvetica-Bold'),
-            # Data rows
-            ('FONTSIZE',    (0, 1), (-1, -1), 9),
+            ('FONTNAME',   (0, 1), (-1, 1), 'Helvetica-Bold'),
+            ('FONTSIZE',   (0, 1), (-1, -1), 9),
             ('ROWBACKGROUNDS', (0, 2), (-1, -1),
              [colors.white, colors.HexColor('#f0fdf4')]),
-            ('GRID',        (0, 0), (-1, -1),
+            ('GRID',       (0, 0), (-1, -1),
              0.5, colors.HexColor('#d1fae5')),
-            ('PADDING',     (0, 0), (-1, -1), 7),
-            ('ALIGN',       (2, 1), (-1, -1), 'CENTER'),
+            ('PADDING',    (0, 0), (-1, -1), 7),
+            ('ALIGN',      (2, 1), (-1, -1), 'CENTER'),
         ]))
         elements.append(table)
         elements.append(Spacer(1, 20))
@@ -1249,6 +1334,7 @@ def export_pdf(request, election_id):
     doc.build(elements)
     buffer.seek(0)
 
+    from django.http import HttpResponse
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = (
         f'attachment; '
@@ -1287,7 +1373,6 @@ def export_excel(request, election_id):
     ws = wb.active
     ws.title = 'Election Results'
 
-    # Styles
     header_font = Font(bold=True, color='FFFFFF', size=11)
     header_fill = PatternFill(
         start_color='166534', end_color='166534',
@@ -1310,7 +1395,6 @@ def export_excel(request, election_id):
         bottom=Side(style='thin', color='d1fae5'),
     )
 
-    # Title row
     ws.merge_cells('A1:F1')
     title_cell = ws['A1']
     title_cell.value = f'KuraVote — {election.election_name}'
@@ -1318,7 +1402,6 @@ def export_excel(request, election_id):
     title_cell.alignment = center
     ws.row_dimensions[1].height = 30
 
-    # Summary row
     total_students = Student.objects.filter(is_staff=False).count()
     voters_count = Vote.objects.filter(
         election=election
@@ -1348,19 +1431,16 @@ def export_excel(request, election_id):
             key=lambda c: c.vote_count,
             reverse=True
         )
-
         pos_total = Vote.objects.filter(position=position).count()
 
-        if candidates and pos_total > 0 \
-                and candidates[0].vote_count > 0:
-            winner = candidates[0]
-        else:
-            winner = None
-
-        # Position header
-        ws.merge_cells(
-            f'A{current_row}:F{current_row}'
+        winner = (
+            candidates[0]
+            if candidates and pos_total > 0
+            and candidates[0].vote_count > 0
+            else None
         )
+
+        ws.merge_cells(f'A{current_row}:F{current_row}')
         pos_cell = ws.cell(
             row=current_row, column=1,
             value=position.position_name.upper()
@@ -1374,29 +1454,27 @@ def export_excel(request, election_id):
         ws.row_dimensions[current_row].height = 22
         current_row += 1
 
-        # Winner line
         if winner:
-            ws.merge_cells(
-                f'A{current_row}:F{current_row}'
-            )
+            ws.merge_cells(f'A{current_row}:F{current_row}')
             win_cell = ws.cell(
                 row=current_row, column=1,
                 value=f'Winner: {winner.student.get_full_name()}'
             )
             win_cell.font = Font(
-                bold=True, color='166534', size=10,
-                italic=True
+                bold=True, color='166534',
+                size=10, italic=True
             )
             win_cell.fill = winner_fill
-            win_cell.alignment = Alignment(horizontal='left',
-                                           vertical='center',
-                                           indent=1)
+            win_cell.alignment = Alignment(
+                horizontal='left', vertical='center', indent=1
+            )
             ws.row_dimensions[current_row].height = 18
             current_row += 1
 
-        # Column headers
-        headers = ['#', 'Candidate Name',
-                   'Admission No', 'Votes', '%', 'Status']
+        headers = [
+            '#', 'Candidate Name',
+            'Admission No', 'Votes', '%', 'Status'
+        ]
         for col, header in enumerate(headers, 1):
             cell = ws.cell(
                 row=current_row, column=col, value=header
@@ -1408,39 +1486,39 @@ def export_excel(request, election_id):
         ws.row_dimensions[current_row].height = 18
         current_row += 1
 
-        # Candidate rows
         for i, c in enumerate(candidates, 1):
-            is_winner = (winner and c.id == winner.id)
-            status = 'WINNER' if is_winner else ''
-
+            is_winner = winner and c.id == winner.id
             row_data = [
                 i,
                 c.student.get_full_name(),
                 c.student.admission_number,
                 c.vote_count,
                 f'{c.vote_percentage}%',
-                status,
+                'WINNER' if is_winner else '',
             ]
             for col, value in enumerate(row_data, 1):
                 cell = ws.cell(
                     row=current_row, column=col, value=value
                 )
                 cell.border = thin_border
-                cell.alignment = center if col != 2 else \
-                    Alignment(horizontal='left',
-                              vertical='center', indent=1)
+                cell.alignment = (
+                    center if col != 2 else
+                    Alignment(
+                        horizontal='left',
+                        vertical='center',
+                        indent=1
+                    )
+                )
                 if is_winner:
                     cell.font = winner_font
                     cell.fill = winner_fill
                 elif i % 2 == 0:
                     cell.fill = alt_fill
-
             ws.row_dimensions[current_row].height = 16
             current_row += 1
 
-        current_row += 1  # Gap between positions
+        current_row += 1
 
-    # Column widths
     ws.column_dimensions['A'].width = 5
     ws.column_dimensions['B'].width = 28
     ws.column_dimensions['C'].width = 16
@@ -1480,72 +1558,17 @@ def admin_audit_log(request):
     return render(request, 'admin/audit_log.html', {'logs': logs})
 
 
-# API ENDPOINT
 @staff_member_required(login_url='login')
 def admin_active_users_api(request):
-    from .utils import get_active_users
     users = get_active_users()
     return JsonResponse({
         'count': len(users),
         'users': users,
     })
-# ── Settings ──────────────────────────────────────────────
 
+
+# ── Settings ──────────────────────────────────────────────
 
 @staff_member_required(login_url='login')
 def admin_settings(request):
     return render(request, 'admin/settings.html')
-
-
-@login_required(login_url='login')
-def student_notifications(request):
-
-    if request.user.is_staff:
-        return redirect('admin_dashboard')
-
-    notifications = request.user.notifications.all()
-
-    # Mark all as read when page is opened
-    request.user.notifications.filter(
-        is_read=False
-    ).update(is_read=True)
-
-    context = {
-        'notifications': notifications,
-    }
-    return render(
-        request,
-        'student/notifications.html',
-        context
-    )
-
-
-@login_required(login_url='login')
-def notifications_api(request):
-    if request.user.is_staff:
-        return JsonResponse({'count': 0, 'notifications': []})
-
-    unread = request.user.notifications.filter(
-        is_read=False
-    ).values(
-        'id', 'title', 'message',
-        'notif_type', 'created_at'
-    )[:10]
-
-    return JsonResponse({
-        'count':         request.user.notifications.filter(
-            is_read=False
-        ).count(),
-        'notifications': [
-            {
-                'id':         n['id'],
-                'title':      n['title'],
-                'message':    n['message'],
-                'type':       n['notif_type'],
-                'created_at': n['created_at'].strftime(
-                    '%d %b %Y, %H:%M'
-                ),
-            }
-            for n in unread
-        ],
-    })

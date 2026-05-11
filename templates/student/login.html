@@ -27,12 +27,10 @@
             <i class="fa fa-shield-alt"></i>
           </div>
           <div>
-            <div style="font-weight:600; color:#fff;
-                        font-size:0.9rem;">
+            <div style="font-weight:600; color:#fff; font-size:0.9rem;">
               Secure Voting
             </div>
-            <div style="color:rgba(255,255,255,0.6);
-                        font-size:0.8rem;">
+            <div style="color:rgba(255,255,255,0.6); font-size:0.8rem;">
               Every vote is encrypted and protected
             </div>
           </div>
@@ -43,12 +41,10 @@
             <i class="fa fa-check-double"></i>
           </div>
           <div>
-            <div style="font-weight:600; color:#fff;
-                        font-size:0.9rem;">
+            <div style="font-weight:600; color:#fff; font-size:0.9rem;">
               One Vote Per Student
             </div>
-            <div style="color:rgba(255,255,255,0.6);
-                        font-size:0.8rem;">
+            <div style="color:rgba(255,255,255,0.6); font-size:0.8rem;">
               Duplicate voting is completely prevented
             </div>
           </div>
@@ -59,12 +55,10 @@
             <i class="fa fa-chart-bar"></i>
           </div>
           <div>
-            <div style="font-weight:600; color:#fff;
-                        font-size:0.9rem;">
+            <div style="font-weight:600; color:#fff; font-size:0.9rem;">
               Live Results
             </div>
-            <div style="color:rgba(255,255,255,0.6);
-                        font-size:0.8rem;">
+            <div style="color:rgba(255,255,255,0.6); font-size:0.8rem;">
               Real-time vote counts as they come in
             </div>
           </div>
@@ -75,12 +69,10 @@
             <i class="fa fa-mobile-alt"></i>
           </div>
           <div>
-            <div style="font-weight:600; color:#fff;
-                        font-size:0.9rem;">
+            <div style="font-weight:600; color:#fff; font-size:0.9rem;">
               Mobile Friendly
             </div>
-            <div style="color:rgba(255,255,255,0.6);
-                        font-size:0.8rem;">
+            <div style="color:rgba(255,255,255,0.6); font-size:0.8rem;">
               Vote from any device, anywhere
             </div>
           </div>
@@ -101,7 +93,7 @@
   <div class="login-right">
     <div class="login-form-wrap">
 
-      <!-- Mobile brand (shown only on mobile) -->
+      <!-- Mobile brand -->
       <div class="d-lg-none text-center mb-4">
         <div style="font-family:'Sora',sans-serif; font-size:2rem;
                     font-weight:700; color:#166534;">
@@ -133,16 +125,13 @@
           <!-- Admission Number -->
           <div class="mb-3">
             <label class="form-label"
-                   style="font-size:0.85rem; font-weight:500;
-                          color:#374151;">
-              <i class="fa fa-id-card me-1"
-                 style="color:#16a34a"></i>
+                   style="font-size:0.85rem; font-weight:500; color:#374151;">
+              <i class="fa fa-id-card me-1" style="color:#16a34a"></i>
               Admission Number
             </label>
             {{ form.admission_number }}
             {% if form.admission_number.errors %}
-              <div class="text-danger mt-1"
-                   style="font-size:0.78rem;">
+              <div class="text-danger mt-1" style="font-size:0.78rem;">
                 <i class="fa fa-exclamation-circle me-1"></i>
                 {{ form.admission_number.errors.0 }}
               </div>
@@ -152,10 +141,8 @@
           <!-- Password -->
           <div class="mb-4">
             <label class="form-label"
-                   style="font-size:0.85rem; font-weight:500;
-                          color:#374151;">
-              <i class="fa fa-lock me-1"
-                 style="color:#16a34a"></i>
+                   style="font-size:0.85rem; font-weight:500; color:#374151;">
+              <i class="fa fa-lock me-1" style="color:#16a34a"></i>
               Password
             </label>
             <div class="input-group">
@@ -164,14 +151,12 @@
                       type="button"
                       id="toggle-pw"
                       style="border:1px solid #d1fae5;
-                             background:#f0fdf4;
-                             color:#16a34a;">
+                             background:#f0fdf4; color:#16a34a;">
                 <i class="fa fa-eye" id="eye-icon"></i>
               </button>
             </div>
             {% if form.password.errors %}
-              <div class="text-danger mt-1"
-                   style="font-size:0.78rem;">
+              <div class="text-danger mt-1" style="font-size:0.78rem;">
                 <i class="fa fa-exclamation-circle me-1"></i>
                 {{ form.password.errors.0 }}
               </div>
@@ -182,8 +167,8 @@
           <button type="submit"
                   id="login-btn"
                   class="btn w-100 py-2"
-                  style="background:#16a34a; color:#fff;
-                         border:none; border-radius:10px;
+                  style="background:#16a34a; color:#fff; border:none;
+                         border-radius:10px;
                          font-family:'Sora',sans-serif;
                          font-size:0.95rem; font-weight:600;">
             <i class="fa fa-sign-in-alt me-2"></i>
@@ -214,115 +199,19 @@
   </div>
 
 </div>
-
-<style>
-  /* ── Login Shell ── */
-  .login-shell {
-    display: flex;
-    min-height: 100vh;
-    background: #f0fdf4;
-  }
-
-  /* ── Left green panel ── */
-  .login-left {
-    width: 45%;
-    background: linear-gradient(160deg, #14532d 0%, #16a34a 100%);
-    padding: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .login-left-inner {
-    max-width: 360px;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-
-  .login-feature {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-  }
-
-  .login-feature-icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    background: rgba(255,255,255,0.12);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #eab308;
-    font-size: 15px;
-    flex-shrink: 0;
-  }
-
-  /* ── Right form panel ── */
-  .login-right {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px 16px;
-  }
-
-  .login-form-wrap {
-    width: 100%;
-    max-width: 420px;
-  }
-
-  .login-card {
-    background: #fff;
-    border-radius: 16px;
-    padding: 32px;
-    border: 1px solid #d1fae5;
-    box-shadow: 0 4px 24px rgba(22,163,74,0.06);
-  }
-
-  /* ── Mobile tweaks ── */
-  @media (max-width: 991px) {
-    .login-shell {
-      flex-direction: column;
-      justify-content: center;
-    }
-    .login-right {
-      padding: 24px 16px;
-    }
-    .login-card {
-      padding: 24px 20px;
-    }
-  }
-
-  /* ── Form field radius ── */
-  .login-card .form-control {
-    border-color: #d1fae5;
-    border-radius: 10px;
-    padding: 10px 14px;
-    font-size: 0.92rem;
-  }
-
-  .login-card .form-control:focus {
-    border-color: #16a34a;
-    box-shadow: 0 0 0 3px rgba(22,163,74,0.12);
-  }
-</style>
-
 {% endblock %}
 
 {% block extra_js %}
 <script>
-  /* ── Show/hide password ── */
+  /* ── Show / hide password ── */
   const toggleBtn = document.getElementById('toggle-pw');
   const pwField   = document.querySelector('input[name="password"]');
   const eyeIcon   = document.getElementById('eye-icon');
 
   if (toggleBtn && pwField) {
     toggleBtn.addEventListener('click', function () {
-      const show    = pwField.type === 'password';
-      pwField.type  = show ? 'text' : 'password';
+      const show   = pwField.type === 'password';
+      pwField.type = show ? 'text' : 'password';
       eyeIcon.className = show ? 'fa fa-eye-slash' : 'fa fa-eye';
     });
   }
@@ -333,10 +222,10 @@
 
   if (form && loginBtn) {
     form.addEventListener('submit', function () {
-      loginBtn.disabled   = true;
-      loginBtn.innerHTML  =
-        '<span class="spinner-border spinner-border-sm me-2">'
-        + '</span>Logging in...';
+      loginBtn.disabled  = true;
+      loginBtn.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-2"></span>'
+        + 'Logging in...';
     });
   }
 </script>
