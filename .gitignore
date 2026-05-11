@@ -12,3 +12,7 @@ db.sqlite3
 *.env
 node_modules/
 static/css/tailwind.css
+package-lock.json
+package.json
+postcss.config.js
+tailwind.config.js
