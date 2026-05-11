@@ -94,7 +94,7 @@ def login_view(request):
                     else:
                         messages.error(
                             request,
-                            'Incorrect password. Please try again.'
+                            'Invalid admission number or password. Please try again.'
                         )
                 except Student.DoesNotExist:
                     messages.error(
@@ -817,6 +817,9 @@ def admin_students_delete_all(request):
     return redirect('admin_students')
 
 
+MAX_CSV_ROWS = 15_000  # one school realistically never exceeds this
+
+
 @staff_member_required(login_url='login')
 def admin_upload_csv(request):
     form = CSVUploadForm()
@@ -838,8 +841,20 @@ def admin_upload_csv(request):
             skipped = 0
             errors = []
             seen_in_csv = set()
+            row_count = 0  # ── NEW: row counter ─────────────────────
 
             for row_num, row in enumerate(reader, start=2):
+
+                # ── NEW: hard limit before processing each row ───────
+                row_count += 1
+                if row_count > MAX_CSV_ROWS:
+                    messages.error(
+                        request,
+                        f'CSV exceeds {MAX_CSV_ROWS} rows. '
+                        'Split into smaller files and re-upload.'
+                    )
+                    return redirect('admin_students')
+
                 try:
                     admission_number = int(
                         row['admission_number'].strip()

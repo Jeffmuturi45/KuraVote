@@ -1,7 +1,11 @@
 from django import forms
+from django.core.validators import MaxValueValidator, MinLengthValidator
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm
 from .models import Election, Position, Candidate
+import re
+import imghdr
 
 Student = get_user_model()
 
@@ -14,13 +18,20 @@ class StudentLoginForm(forms.Form):
             'class':       'form-control form-control-lg',
             'placeholder': 'Enter your admission number',
             'autofocus':   True,
+            'min':           1,
+            'max':           999999
         }),
-        label='Admission Number'
+        label='Admission Number',
+        validators=[
+            MinLengthValidator(1),
+            MaxValueValidator(999999),
+        ]
     )
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={
             'class':       'form-control form-control-lg',
             'placeholder': 'Enter your password',
+            'maxlength':   128,
         }),
         label='Password'
     )
@@ -31,6 +42,7 @@ class ForcePasswordChangeForm(forms.Form):
 
     new_password1 = forms.CharField(
         label='New Password',
+        max_length=128,
         widget=forms.PasswordInput(attrs={
             'class':       'form-control form-control-lg',
             'placeholder': 'Enter new password',
@@ -38,11 +50,16 @@ class ForcePasswordChangeForm(forms.Form):
     )
     new_password2 = forms.CharField(
         label='Confirm New Password',
+        max_length=128,
         widget=forms.PasswordInput(attrs={
             'class':       'form-control form-control-lg',
             'placeholder': 'Confirm new password',
         })
     )
+
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -50,17 +67,20 @@ class ForcePasswordChangeForm(forms.Form):
         p2 = cleaned_data.get('new_password2')
 
         if p1 and p2:
-            # Passwords must match
             if p1 != p2:
+                raise forms.ValidationError('Passwords do not match.')
+            if len(p1) < 8:              # 8, not 6
                 raise forms.ValidationError(
-                    'Passwords do not match. Please try again.'
+                    'Password must be at least 8 characters.'
                 )
-            # Minimum length
-            if len(p1) < 6:
+            # Block admission number as password
+            if self.user and p1 == str(self.user.admission_number):
                 raise forms.ValidationError(
-                    'Password must be at least 6 characters long.'
+                    'Password cannot be your admission number.'
                 )
-            # Cannot use admission number as password
+            # Block common sequences
+            if p1.lower() in ('password', '12345678', 'qwerty123'):
+                raise forms.ValidationError('Password is too common.')
         return cleaned_data
 
 

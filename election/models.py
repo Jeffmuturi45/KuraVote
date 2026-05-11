@@ -1,10 +1,11 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
-from django.core.validators import FileExtensionValidator
+from django.core.validators import (
+    MinValueValidator, MaxValueValidator, FileExtensionValidator, MinLengthValidator)
 from django.utils import timezone
 from django.db.models import Count
-
-# Create your models here.
+import uuid
+import os
 
 
 class StudentManager(BaseUserManager):
@@ -24,10 +25,14 @@ class StudentManager(BaseUserManager):
 
 
 class Student(AbstractBaseUser, PermissionsMixin):
-    admission_number = models.IntegerField(unique=True)
+    admission_number = models.IntegerField(unique=True,
+                                           validators=[
+                                               MinValueValidator(1),
+                                               MaxValueValidator(999999)
+                                           ])
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True, max_length=254)
 
     password_changed = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
@@ -180,6 +185,12 @@ class Position(models.Model):
         return f"{self.position_name} ({self.election.election_name})"
 
 
+def candidate_photo_path(instance, filename):
+    """Store as UUID to prevent filename-based attacks."""
+    ext = os.path.splitext(filename)[1].lower()
+    return f'candidates/{uuid.uuid4().hex}{ext}'
+
+
 class Candidate(models.Model):
 
     student = models.ForeignKey(
@@ -192,9 +203,13 @@ class Candidate(models.Model):
         on_delete=models.CASCADE,
         related_name='candidates'
     )
-    manifesto = models.TextField(max_length=500, blank=True)
+    manifesto = models.TextField(
+        max_length=500,
+        blank=True,
+        validators=[MinLengthValidator(0)],
+    )
     photo = models.ImageField(
-        upload_to='candidates/',
+        upload_to=candidate_photo_path,
         blank=True,
         null=True,
         validators=[

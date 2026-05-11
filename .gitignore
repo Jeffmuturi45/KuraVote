@@ -9,3 +9,6 @@ staticfiles/
 db.sqlite3
 *.sqlite3
 .DS_Store
+*.env
+node_modules/
+static/css/tailwind.css
