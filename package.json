@@ -1,0 +1,31 @@
+{
+  "name": "kuravote",
+  "version": "1.0.0",
+  "description": "<div align=\"center\">",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:css": "tailwindcss -i ./static/src/tailwind.css -o ./static/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./static/src/tailwind.css -o ./static/css/tailwind.css --watch",
+    "dev": "tailwindcss -i ./static/src/tailwind.css -o ./static/css/tailwind.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jeffmuturi45/KuraVote.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Jeffmuturi45/KuraVote/issues"
+  },
+  "homepage": "https://github.com/Jeffmuturi45/KuraVote#readme",
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.11",
+    "@tailwindcss/typography": "^0.5.19",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.9",
+    "tailwindcss": "^4.2.2"
+  }
+}
