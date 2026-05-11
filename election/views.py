@@ -894,6 +894,92 @@ def admin_student_edit(request, pk):
 
 
 @staff_member_required(login_url='login')
+def admin_students_bulk_action(request):
+    if request.method != 'POST':
+        return redirect('admin_students')
+
+    action = request.POST.get('action', '')
+    student_ids = request.POST.getlist('student_ids')
+
+    # ── Delete All ────────────────────────────────────────
+    if action == 'delete_all':
+        from django.contrib.admin.models import LogEntry
+        ids = list(
+            Student.objects.filter(
+                is_staff=False
+            ).values_list('id', flat=True)
+        )
+        LogEntry.objects.filter(user_id__in=ids).delete()
+        count = Student.objects.filter(is_staff=False).delete()[0]
+        messages.success(
+            request,
+            f'All {count} students deleted successfully.'
+        )
+        return redirect('admin_students')
+
+    # ── Validate selection ────────────────────────────────
+    if not student_ids:
+        messages.error(request, 'No students selected.')
+        return redirect('admin_students')
+
+    # Only non-staff students
+    students = Student.objects.filter(
+        pk__in=student_ids,
+        is_staff=False
+    )
+    count = students.count()
+
+    if count == 0:
+        messages.error(request, 'No valid students found.')
+        return redirect('admin_students')
+
+    # ── Bulk Activate ─────────────────────────────────────
+    if action == 'activate':
+        students.update(is_active=True)
+        messages.success(
+            request,
+            f'{count} student(s) activated successfully.'
+        )
+
+    # ── Bulk Deactivate ───────────────────────────────────
+    elif action == 'deactivate':
+        students.update(is_active=False)
+        messages.success(
+            request,
+            f'{count} student(s) deactivated successfully.'
+        )
+
+    # ── Bulk Reset Password ───────────────────────────────
+    elif action == 'reset_password':
+        for student in students:
+            student.set_password(str(student.admission_number))
+            student.password_changed = False
+            student.save(
+                update_fields=['password', 'password_changed']
+            )
+        messages.success(
+            request,
+            f'Passwords reset for {count} student(s).'
+        )
+
+    # ── Bulk Delete ───────────────────────────────────────
+    elif action == 'delete':
+        from django.contrib.admin.models import LogEntry
+        ids = list(students.values_list('id', flat=True))
+        LogEntry.objects.filter(user_id__in=ids).delete()
+        students.delete()
+        messages.success(
+            request,
+            f'{count} student(s) deleted successfully.'
+        )
+
+    else:
+        messages.error(request, 'Invalid action.')
+
+    return redirect('admin_students')
+
+
+@staff_member_required(login_url='login')
 def admin_student_delete(request, pk):
     student = get_object_or_404(Student, pk=pk, is_staff=False)
     if request.method == 'POST':

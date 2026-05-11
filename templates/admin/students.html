@@ -7,196 +7,319 @@
 
 {% block admin_content %}
 
+<!-- ── Action Bar ─────────────────────────────────────── -->
 <div class="action-bar">
   <div>
     <div class="section-title">Registered Students</div>
     <div class="section-sub">
-      {{ students.paginator.count }} student{{ students.paginator.count|pluralize }} total
+      {{ students.paginator.count }}
+      student{{ students.paginator.count|pluralize }} total
     </div>
   </div>
-  <div class="d-flex gap-2">
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
     <a href="{% url 'admin_upload_csv' %}" class="btn-kura">
       <i class="fa fa-file-csv"></i>
       Upload CSV
     </a>
+    <button type="button"
+            class="btn-kura"
+            style="background:#dc2626;"
+            id="bulk-delete-btn"
+            onclick="openDeleteAllModal()"
+            disabled>
+      <i class="fa fa-trash"></i>
+      <span id="bulk-delete-label">Delete All</span>
+    </button>
   </div>
 </div>
 
-<!-- Search -->
-<form method="GET" class="mb-3">
-  <div class="input-group" style="max-width:400px;">
-    <span class="input-group-text"
-          style="background:#fff; border-color:var(--border);
-                 border-radius:10px 0 0 10px;">
-      <i class="fa fa-search" style="color:#94a3b8;"></i>
-    </span>
-    <input type="text"
-           name="q"
-           value="{{ query }}"
-           class="form-control"
-           placeholder="Search by name, admission number or email..."
-           style="border-left:none; border-radius:0 10px 10px 0;">
-    {% if query %}
-      <a href="{% url 'admin_students' %}"
-         class="btn-kura-outline ms-2"
-         style="border-radius:10px; padding:8px 14px;">
-        <i class="fa fa-times"></i>
-      </a>
-    {% endif %}
-  </div>
-</form>
+<!-- ── Search ─────────────────────────────────────────── -->
+<div style="margin-bottom:14px; position:relative;"
+     id="search-wrapper">
+  <form method="GET" id="search-form">
+    <div style="display:flex; align-items:center; gap:8px;
+                max-width:480px; position:relative;">
+      <div style="position:relative; flex:1;">
+        <span style="position:absolute; left:12px; top:50%;
+                     transform:translateY(-50%);
+                     color:#94a3b8; pointer-events:none;">
+          <i class="fa fa-search" style="font-size:13px;"></i>
+        </span>
+        <input type="text"
+               name="q"
+               id="search-input"
+               value="{{ query }}"
+               class="form-control"
+               placeholder="Search name, admission number or email..."
+               autocomplete="off"
+               style="padding-left:36px; border-color:var(--border);
+                      border-radius:10px; font-size:13px;">
+      </div>
+      {% if query %}
+        <a href="{% url 'admin_students' %}"
+           class="btn-kura-outline"
+           style="padding:8px 14px; border-radius:10px;
+                  white-space:nowrap;">
+          <i class="fa fa-times"></i>
+          Clear
+        </a>
+      {% endif %}
+    </div>
+  </form>
 
-<div class="kura-table">
-  <table class="table table-hover mb-0">
-    <thead>
-      <tr>
-        <th>Student</th>
-        <th>Admission No</th>
-        <th>Email</th>
-        <th>Password</th>
-        <th>Status</th>
-        <th>Joined</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for student in students %}
+  <!-- Autocomplete Dropdown -->
+  <div id="autocomplete-dropdown"
+       style="display:none; position:absolute; top:42px; left:0;
+              width:480px; background:#fff;
+              border:1px solid var(--border); border-radius:10px;
+              box-shadow:0 8px 24px rgba(0,0,0,0.08);
+              z-index:200; max-height:280px; overflow-y:auto;">
+  </div>
+</div>
+
+<!-- ── Bulk Actions Bar (shows when rows selected) ──────── -->
+<div id="bulk-actions-bar"
+     style="display:none; background:#f0fdf4;
+            border:1px solid #86efac; border-radius:10px;
+            padding:10px 16px; margin-bottom:12px;
+            align-items:center; justify-content:space-between;
+            flex-wrap:wrap; gap:10px;">
+  <div style="font-size:13px; font-weight:600; color:#166534;">
+    <i class="fa fa-check-square me-2"></i>
+    <span id="selected-count">0</span> student(s) selected
+  </div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <button onclick="bulkAction('activate')"
+            class="tbl-btn tbl-btn-success"
+            style="padding:6px 14px; font-size:12px;">
+      <i class="fa fa-check me-1"></i>Activate
+    </button>
+    <button onclick="bulkAction('deactivate')"
+            class="tbl-btn tbl-btn-danger"
+            style="padding:6px 14px; font-size:12px;">
+      <i class="fa fa-ban me-1"></i>Deactivate
+    </button>
+    <button onclick="bulkAction('reset_password')"
+            class="tbl-btn tbl-btn-info"
+            style="padding:6px 14px; font-size:12px;">
+      <i class="fa fa-key me-1"></i>Reset Passwords
+    </button>
+    <button onclick="bulkAction('delete')"
+            class="tbl-btn tbl-btn-danger"
+            style="padding:6px 14px; font-size:12px;
+                   background:#fef2f2;">
+      <i class="fa fa-trash me-1"></i>Delete Selected
+    </button>
+    <button onclick="clearSelection()"
+            class="tbl-btn"
+            style="padding:6px 14px; font-size:12px;
+                   border-color:#d1fae5; color:#64748b;">
+      <i class="fa fa-times me-1"></i>Clear
+    </button>
+  </div>
+</div>
+
+<!-- ── Students Table ─────────────────────────────────── -->
+<form method="POST" id="bulk-form"
+      action="{% url 'admin_students_bulk_action' %}">
+  {% csrf_token %}
+  <input type="hidden" name="action" id="bulk-action-input">
+
+  <div class="kura-table">
+    <table class="table table-hover mb-0" id="students-table">
+      <thead>
         <tr>
-          <td>
-            <div class="d-flex align-items-center gap-3">
-              <div style="width:36px; height:36px; border-radius:50%;
-                          background:{{ student.get_avatar_color }};
-                          display:flex; align-items:center;
-                          justify-content:center; color:#fff;
-                          font-family:'Sora',sans-serif;
-                          font-weight:700; font-size:12px;
-                          flex-shrink:0;">
-                {{ student.get_initials }}
-              </div>
-              <div>
-                <div style="font-weight:600; font-size:13px;
-                            color:#1e293b;">
-                  {{ student.get_full_name }}
+          <!-- Select All checkbox -->
+          <th style="width:40px;">
+            <div style="display:flex; align-items:center;
+                        justify-content:center;">
+              <input type="checkbox"
+                     id="select-all"
+                     onchange="toggleSelectAll(this)"
+                     style="width:16px; height:16px;
+                            cursor:pointer; accent-color:#16a34a;">
+            </div>
+          </th>
+          <th>Student</th>
+          <th>Admission No</th>
+          <th>Email</th>
+          <th>Password</th>
+          <th>Status</th>
+          <th>Joined</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="students-tbody">
+        {% for student in students %}
+          <tr data-student-id="{{ student.pk }}"
+              data-name="{{ student.get_full_name|lower }}"
+              data-admission="{{ student.admission_number }}"
+              data-email="{{ student.email|lower }}"
+              class="student-row">
+
+            <!-- Row checkbox -->
+            <td style="text-align:center; vertical-align:middle;">
+              <input type="checkbox"
+                     name="student_ids"
+                     value="{{ student.pk }}"
+                     class="row-checkbox"
+                     onchange="onRowCheckboxChange()"
+                     style="width:16px; height:16px;
+                            cursor:pointer; accent-color:#16a34a;">
+            </td>
+
+            <!-- Name + Avatar -->
+            <td>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:36px; height:36px;
+                            border-radius:50%; flex-shrink:0;
+                            background:{{ student.get_avatar_color }};
+                            display:flex; align-items:center;
+                            justify-content:center; color:#fff;
+                            font-family:'Sora',sans-serif;
+                            font-weight:700; font-size:12px;">
+                  {{ student.get_initials }}
+                </div>
+                <div>
+                  <div style="font-weight:600; font-size:13px;
+                              color:#1e293b;">
+                    {{ student.get_full_name }}
+                  </div>
                 </div>
               </div>
-            </div>
-          </td>
-          <td style="font-size:13px; font-weight:600;
-                     color:#166534;">
-            {{ student.admission_number }}
-          </td>
-          <td style="font-size:12px; color:#64748b;">
-            {{ student.email }}
-          </td>
-          <td>
-            {% if student.password_changed %}
-              <span style="font-size:11px; background:#dcfce7;
-                           color:#166534; padding:3px 10px;
-                           border-radius:10px; font-weight:500;">
-                <i class="fa fa-check me-1"></i>Changed
-              </span>
-            {% else %}
-              <span style="font-size:11px; background:#fefce8;
-                           color:#854d0e; padding:3px 10px;
-                           border-radius:10px; font-weight:500;">
-                <i class="fa fa-key me-1"></i>Default
-              </span>
-            {% endif %}
-          </td>
-          <td>
-            {% if student.is_active %}
-              <span style="font-size:11px; background:#dcfce7;
-                           color:#166534; padding:3px 10px;
-                           border-radius:10px; font-weight:500;">
-                Active
-              </span>
-            {% else %}
-              <span style="font-size:11px; background:#fee2e2;
-                           color:#991b1b; padding:3px 10px;
-                           border-radius:10px; font-weight:500;">
-                Inactive
-              </span>
-            {% endif %}
-          </td>
-          <td style="font-size:12px; color:#94a3b8;">
-            {{ student.date_joined|date:"d M Y" }}
-          </td>
-          <td>
-  <div class="d-flex gap-1 flex-wrap">
-    <!-- Edit -->
-    <a href="{% url 'admin_student_edit' student.pk %}"
-       class="tbl-btn tbl-btn-edit"
-       title="Edit student details">
-      <i class="fa fa-edit"></i>
-    </a>
-    <!-- Reset password -->
-    <form method="POST"
-          action="{% url 'admin_reset_password' student.pk %}"
-          style="display:inline;"
-          onsubmit="return confirm(
-            'Reset password for {{ student.get_full_name }}?\n'
-            + 'Their password will be reset to their admission number.')">
-      {% csrf_token %}
-      <button type="submit"
-              class="tbl-btn tbl-btn-info"
-              title="Reset password">
-        <i class="fa fa-key"></i>
-      </button>
-    </form>
-    <!-- Activate/Deactivate -->
-    <form method="POST"
-          action="{% url 'admin_toggle_student' student.pk %}"
-          style="display:inline;"
-          onsubmit="return confirm(
-            '{% if student.is_active %}Deactivate{% else %}Activate{% endif %}'
-            + ' {{ student.get_full_name }}?')">
-      {% csrf_token %}
-      <button type="submit"
-              class="tbl-btn
-              {% if student.is_active %}tbl-btn-danger
-              {% else %}tbl-btn-success{% endif %}"
-              title="{% if student.is_active %}Deactivate
-                     {% else %}Activate{% endif %}">
-        <i class="fa fa-{% if student.is_active %}ban
-                   {% else %}check{% endif %}"></i>
-      </button>
-    </form>
-    <!-- Delete -->
-    <a href="{% url 'admin_student_delete' student.pk %}"
-       class="tbl-btn tbl-btn-danger"
-       title="Delete student">
-      <i class="fa fa-trash"></i>
-    </a>
-  </div>
-</td>
-        </tr>
-      {% empty %}
-        <tr>
-          <td colspan="7">
-            <div class="d-flex gap-2">
-  <a href="{% url 'admin_upload_csv' %}" class="btn-kura">
-    <i class="fa fa-file-csv"></i>
-    Upload CSV
-  </a>
-  <button type="button"
-          class="btn-kura"
-          style="background:#dc2626;"
-          onclick="document.getElementById('delete-all-modal')
-                   .style.display='flex'">
-    <i class="fa fa-trash"></i>
-    Delete All
-  </button>
-</div>
-          </td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+            </td>
 
-<!-- Pagination -->
+            <!-- Admission No -->
+            <td style="font-size:13px; font-weight:600;
+                       color:#166534;">
+              {{ student.admission_number }}
+            </td>
+
+            <!-- Email -->
+            <td style="font-size:12px; color:#64748b;">
+              {{ student.email }}
+            </td>
+
+            <!-- Password status -->
+            <td>
+              {% if student.password_changed %}
+                <span style="font-size:11px; background:#dcfce7;
+                             color:#166534; padding:3px 10px;
+                             border-radius:10px; font-weight:500;">
+                  <i class="fa fa-check me-1"></i>Changed
+                </span>
+              {% else %}
+                <span style="font-size:11px; background:#fefce8;
+                             color:#854d0e; padding:3px 10px;
+                             border-radius:10px; font-weight:500;">
+                  <i class="fa fa-key me-1"></i>Default
+                </span>
+              {% endif %}
+            </td>
+
+            <!-- Active status -->
+            <td>
+              {% if student.is_active %}
+                <span style="font-size:11px; background:#dcfce7;
+                             color:#166534; padding:3px 10px;
+                             border-radius:10px; font-weight:500;">
+                  Active
+                </span>
+              {% else %}
+                <span style="font-size:11px; background:#fee2e2;
+                             color:#991b1b; padding:3px 10px;
+                             border-radius:10px; font-weight:500;">
+                  Inactive
+                </span>
+              {% endif %}
+            </td>
+
+            <!-- Date joined -->
+            <td style="font-size:12px; color:#94a3b8;">
+              {{ student.date_joined|date:"d M Y" }}
+            </td>
+
+            <!-- Row Actions -->
+            <td>
+              <div style="display:flex; gap:4px; flex-wrap:wrap;">
+
+                <!-- Edit -->
+                <a href="{% url 'admin_student_edit' student.pk %}"
+                   class="tbl-btn tbl-btn-edit"
+                   title="Edit student">
+                  <i class="fa fa-edit"></i>
+                </a>
+
+                <!-- Reset password -->
+                <form method="POST"
+                      action="{% url 'admin_reset_password' student.pk %}"
+                      style="display:inline;"
+                      onsubmit="return confirm(
+                        'Reset password for {{ student.get_full_name }}?\n'
+                        + 'Password will reset to admission number.')">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="tbl-btn tbl-btn-info"
+                          title="Reset password">
+                    <i class="fa fa-key"></i>
+                  </button>
+                </form>
+
+                <!-- Toggle active/inactive -->
+                <form method="POST"
+                      action="{% url 'admin_toggle_student' student.pk %}"
+                      style="display:inline;"
+                      onsubmit="return confirm(
+                        '{% if student.is_active %}Deactivate{% else %}Activate{% endif %}'
+                        + ' {{ student.get_full_name }}?')">
+                  {% csrf_token %}
+                  <button type="submit"
+                          class="tbl-btn
+                          {% if student.is_active %}tbl-btn-danger
+                          {% else %}tbl-btn-success{% endif %}"
+                          title="{% if student.is_active %}Deactivate
+                                 {% else %}Activate{% endif %}">
+                    <i class="fa fa-{% if student.is_active %}ban
+                               {% else %}check{% endif %}"></i>
+                  </button>
+                </form>
+
+                <!-- Delete single -->
+                <a href="{% url 'admin_student_delete' student.pk %}"
+                   class="tbl-btn tbl-btn-danger"
+                   title="Delete student">
+                  <i class="fa fa-trash"></i>
+                </a>
+
+              </div>
+            </td>
+
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <i class="fa fa-user-graduate"></i>
+                <p>No students found.</p>
+                <a href="{% url 'admin_upload_csv' %}"
+                   class="btn-kura">
+                  <i class="fa fa-file-csv"></i>
+                  Upload CSV to add students
+                </a>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</form>
+
+<!-- ── Pagination ─────────────────────────────────────── -->
 {% if students.has_other_pages %}
-  <div class="d-flex justify-content-center mt-4 gap-1">
+  <div style="display:flex; justify-content:center;
+              margin-top:20px; gap:6px; flex-wrap:wrap;">
     {% if students.has_previous %}
       <a href="?page={{ students.previous_page_number }}{% if query %}&q={{ query }}{% endif %}"
          class="btn-kura-outline" style="padding:7px 14px;">
@@ -224,14 +347,13 @@
   </div>
 {% endif %}
 
-<!-- Delete All Modal -->
+<!-- ── Delete All Modal ───────────────────────────────── -->
 <div id="delete-all-modal"
      style="display:none; position:fixed; inset:0;
             background:rgba(0,0,0,0.5); z-index:500;
             align-items:center; justify-content:center;">
-  <div style="background:#fff; border-radius:16px;
-              padding:32px; max-width:420px; width:90%;
-              text-align:center;">
+  <div style="background:#fff; border-radius:16px; padding:32px;
+              max-width:440px; width:90%; text-align:center;">
 
     <div style="width:60px; height:60px; border-radius:50%;
                 background:#fef2f2; display:flex;
@@ -242,42 +364,428 @@
     </div>
 
     <h5 style="font-family:'Sora',sans-serif; color:#dc2626;
-               margin-bottom:8px;">
-      Delete All Students
+               margin-bottom:8px;" id="modal-title">
+      Delete Students
     </h5>
-    <p style="font-size:13px; color:#64748b; margin-bottom:20px;">
-      This will permanently delete
-      <strong>all {{ students.paginator.count }} students</strong>
-      and all their votes.
-      Type <strong>DELETE ALL</strong> below to confirm.
+
+    <p style="font-size:13px; color:#64748b; margin-bottom:8px;"
+       id="modal-description">
     </p>
 
-    <form method="POST"
-          action="{% url 'admin_students_delete_all' %}">
-      {% csrf_token %}
+    <div style="background:#fef2f2; border:1px solid #fecaca;
+                border-radius:8px; padding:10px 14px;
+                margin-bottom:16px; font-size:12px; color:#991b1b;">
+      <i class="fa fa-exclamation-circle me-1"></i>
+      This action is permanent and cannot be undone.
+      All votes from these students will also be deleted.
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <label style="font-size:12px; color:#64748b;
+                    display:block; margin-bottom:6px;">
+        Type <strong>DELETE</strong> to confirm
+      </label>
       <input type="text"
-             name="confirm_text"
-             class="form-control mb-3"
-             placeholder='Type "DELETE ALL" to confirm'
-             style="text-align:center; font-weight:600;">
-      <div class="d-flex gap-2 justify-content-center">
-        <button type="submit"
-                class="btn-kura"
-                style="background:#dc2626; padding:10px 20px;">
-          <i class="fa fa-trash me-1"></i>
-          Delete All
-        </button>
-        <button type="button"
-                class="btn-kura-outline"
-                style="padding:10px 20px;"
-                onclick="document.getElementById('delete-all-modal')
-                         .style.display='none'">
-          Cancel
-        </button>
-      </div>
-    </form>
+             id="modal-confirm-input"
+             class="form-control"
+             placeholder='Type "DELETE" to confirm'
+             style="text-align:center; font-weight:600;"
+             oninput="validateDeleteConfirm(this)">
+    </div>
+
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <button id="modal-confirm-btn"
+              onclick="executeDelete()"
+              disabled
+              style="background:#dc2626; color:#fff; border:none;
+                     border-radius:10px; padding:10px 20px;
+                     font-size:13px; font-weight:600;
+                     cursor:not-allowed; opacity:0.5;
+                     transition:all 0.15s;"
+              class="btn-kura">
+        <i class="fa fa-trash me-1"></i>
+        <span id="modal-confirm-btn-label">Delete</span>
+      </button>
+      <button type="button"
+              class="btn-kura-outline"
+              style="padding:10px 20px;"
+              onclick="closeDeleteModal()">
+        Cancel
+      </button>
+    </div>
 
   </div>
 </div>
 
+<!-- ── Bulk Action Hidden Form ────────────────────────── -->
+<form method="POST" id="bulk-action-form"
+      action="{% url 'admin_students_bulk_action' %}"
+      style="display:none;">
+  {% csrf_token %}
+  <input type="hidden" name="action" id="hidden-action">
+  <div id="hidden-student-ids"></div>
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── State ──────────────────────────────────────────────────
+let selectedIds   = new Set();
+let pendingAction = null;
+let searchTimeout = null;
+
+// All students data for autocomplete
+const allStudents = [
+  {% for student in students %}
+  {
+    id:        {{ student.pk }},
+    name:      "{{ student.get_full_name }}",
+    admission: "{{ student.admission_number }}",
+    email:     "{{ student.email }}",
+    initials:  "{{ student.get_initials }}",
+    color:     "{{ student.get_avatar_color }}",
+    active:    {{ student.is_active|yesno:"true,false" }},
+  },
+  {% endfor %}
+];
+
+// ── Checkbox Logic ─────────────────────────────────────────
+
+function toggleSelectAll(checkbox) {
+  const rows = document.querySelectorAll('.row-checkbox');
+  rows.forEach(cb => {
+    // Only select visible rows
+    const row = cb.closest('tr');
+    if (row && row.style.display !== 'none') {
+      cb.checked = checkbox.checked;
+      const id   = parseInt(cb.value);
+      if (checkbox.checked) {
+        selectedIds.add(id);
+      } else {
+        selectedIds.delete(id);
+      }
+    }
+  });
+  updateBulkBar();
+}
+
+function onRowCheckboxChange() {
+  const rows = document.querySelectorAll('.row-checkbox');
+  selectedIds.clear();
+  rows.forEach(cb => {
+    if (cb.checked) selectedIds.add(parseInt(cb.value));
+  });
+
+  // Update select-all checkbox state
+  const selectAll   = document.getElementById('select-all');
+  const visible     = Array.from(rows).filter(cb => {
+    const row = cb.closest('tr');
+    return row && row.style.display !== 'none';
+  });
+  const allChecked  = visible.length > 0
+                      && visible.every(cb => cb.checked);
+  const someChecked = visible.some(cb => cb.checked);
+  selectAll.checked       = allChecked;
+  selectAll.indeterminate = someChecked && !allChecked;
+
+  updateBulkBar();
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.checked = false;
+  });
+  const selectAll = document.getElementById('select-all');
+  selectAll.checked       = false;
+  selectAll.indeterminate = false;
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar        = document.getElementById('bulk-actions-bar');
+  const countEl    = document.getElementById('selected-count');
+  const deleteBtn  = document.getElementById('bulk-delete-btn');
+  const deleteLabel= document.getElementById('bulk-delete-label');
+  const count      = selectedIds.size;
+
+  if (count > 0) {
+    bar.style.display    = 'flex';
+    countEl.textContent  = count;
+    deleteBtn.disabled   = false;
+    deleteLabel.textContent = count > 0
+      ? `Delete (${count})`
+      : 'Delete All';
+  } else {
+    bar.style.display    = 'none';
+    deleteBtn.disabled   = true;
+    deleteLabel.textContent = 'Delete All';
+  }
+}
+
+// ── Bulk Actions ───────────────────────────────────────────
+
+function bulkAction(action) {
+  const count = selectedIds.size;
+  if (count === 0) return;
+
+  const labels = {
+    activate:       'Activate',
+    deactivate:     'Deactivate',
+    reset_password: 'Reset Passwords for',
+    delete:         'Delete',
+  };
+
+  if (action === 'delete') {
+    openDeleteModal(
+      `Delete ${count} Students`,
+      `This will permanently delete ${count} selected student(s) and all their votes.`,
+      action
+    );
+    return;
+  }
+
+  if (!confirm(
+    `${labels[action]} ${count} selected student(s)?`
+  )) return;
+
+  submitBulkForm(action);
+}
+
+function submitBulkForm(action) {
+  const form      = document.getElementById('bulk-action-form');
+  const actionEl  = document.getElementById('hidden-action');
+  const idsDiv    = document.getElementById('hidden-student-ids');
+
+  actionEl.value  = action;
+  idsDiv.innerHTML= '';
+
+  selectedIds.forEach(id => {
+    const input    = document.createElement('input');
+    input.type     = 'hidden';
+    input.name     = 'student_ids';
+    input.value    = id;
+    idsDiv.appendChild(input);
+  });
+
+  form.submit();
+}
+
+// ── Delete Modal ───────────────────────────────────────────
+
+function openDeleteAllModal() {
+  const count = selectedIds.size;
+  if (count === 0) {
+    // No selection — delete all mode
+    openDeleteModal(
+      'Delete All Students',
+      `This will permanently delete ALL {{ students.paginator.count }} students and all their votes.`,
+      'delete_all'
+    );
+  } else {
+    openDeleteModal(
+      `Delete ${count} Selected Students`,
+      `This will permanently delete ${count} selected student(s) and all their votes.`,
+      'delete'
+    );
+  }
+}
+
+function openDeleteModal(title, description, action) {
+  pendingAction = action;
+  document.getElementById('modal-title').textContent       = title;
+  document.getElementById('modal-description').textContent = description;
+  document.getElementById('modal-confirm-input').value     = '';
+  document.getElementById('modal-confirm-btn').disabled    = true;
+  document.getElementById('modal-confirm-btn').style.opacity   = '0.5';
+  document.getElementById('modal-confirm-btn').style.cursor    = 'not-allowed';
+  document.getElementById('modal-confirm-btn-label').textContent =
+    action === 'delete_all' ? 'Delete All' : 'Delete Selected';
+  document.getElementById('delete-all-modal').style.display = 'flex';
+  setTimeout(() => {
+    document.getElementById('modal-confirm-input').focus();
+  }, 100);
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-all-modal').style.display = 'none';
+  pendingAction = null;
+  document.getElementById('modal-confirm-input').value = '';
+}
+
+function validateDeleteConfirm(input) {
+  const btn     = document.getElementById('modal-confirm-btn');
+  const isValid = input.value.trim() === 'DELETE';
+  btn.disabled             = !isValid;
+  btn.style.opacity        = isValid ? '1'   : '0.5';
+  btn.style.cursor         = isValid ? 'pointer' : 'not-allowed';
+  input.style.borderColor  = isValid ? '#16a34a' : '';
+}
+
+function executeDelete() {
+  const confirmVal = document.getElementById(
+    'modal-confirm-input'
+  ).value.trim();
+  if (confirmVal !== 'DELETE') return;
+
+  closeDeleteModal();
+
+  if (pendingAction === 'delete_all') {
+    // Submit delete all form
+    const form   = document.getElementById('bulk-action-form');
+    const action = document.getElementById('hidden-action');
+    const idsDiv = document.getElementById('hidden-student-ids');
+    action.value = 'delete_all';
+    idsDiv.innerHTML = '';
+    form.submit();
+  } else {
+    submitBulkForm('delete');
+  }
+}
+
+// Close modal on backdrop click
+document.getElementById('delete-all-modal')
+  .addEventListener('click', function(e) {
+    if (e.target === this) closeDeleteModal();
+  });
+
+// Close on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeDeleteModal();
+});
+
+// ── Autocomplete Search ────────────────────────────────────
+
+const searchInput  = document.getElementById('search-input');
+const dropdown     = document.getElementById('autocomplete-dropdown');
+
+searchInput.addEventListener('input', function() {
+  const query = this.value.trim().toLowerCase();
+
+  clearTimeout(searchTimeout);
+
+  if (query.length < 1) {
+    dropdown.style.display = 'none';
+    filterTableRows('');
+    return;
+  }
+
+  searchTimeout = setTimeout(() => {
+    // Filter table rows instantly
+    filterTableRows(query);
+    // Show autocomplete suggestions
+    showAutocomplete(query);
+  }, 150);
+});
+
+searchInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    dropdown.style.display = 'none';
+    document.getElementById('search-form').submit();
+  }
+  if (e.key === 'Escape') {
+    dropdown.style.display = 'none';
+  }
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#search-wrapper')) {
+    dropdown.style.display = 'none';
+  }
+});
+
+function filterTableRows(query) {
+  const rows = document.querySelectorAll('.student-row');
+  let visible = 0;
+
+  rows.forEach(row => {
+    const name      = row.dataset.name      || '';
+    const admission = row.dataset.admission || '';
+    const email     = row.dataset.email     || '';
+    const matches   = !query
+      || name.includes(query)
+      || admission.includes(query)
+      || email.includes(query);
+
+    row.style.display = matches ? '' : 'none';
+    if (matches) visible++;
+  });
+
+  // Update select-all state after filter
+  onRowCheckboxChange();
+}
+
+function showAutocomplete(query) {
+  const matches = allStudents.filter(s =>
+    s.name.toLowerCase().includes(query) ||
+    String(s.admission).includes(query)  ||
+    s.email.toLowerCase().includes(query)
+  ).slice(0, 6);
+
+  if (matches.length === 0) {
+    dropdown.style.display = 'none';
+    return;
+  }
+
+  dropdown.innerHTML = matches.map(s => `
+    <div class="autocomplete-item"
+         onclick="selectAutocomplete('${s.admission}', '${s.name}')"
+         style="display:flex; align-items:center; gap:10px;
+                padding:10px 14px; cursor:pointer;
+                border-bottom:1px solid #f0fdf4;
+                transition:background 0.1s;"
+         onmouseover="this.style.background='#f0fdf4'"
+         onmouseout="this.style.background='#fff'">
+      <div style="width:32px; height:32px; border-radius:50%;
+                  background:${s.color}; display:flex;
+                  align-items:center; justify-content:center;
+                  color:#fff; font-family:'Sora',sans-serif;
+                  font-weight:700; font-size:11px; flex-shrink:0;">
+        ${s.initials}
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:13px; font-weight:600; color:#1e293b;">
+          ${highlight(s.name, query)}
+        </div>
+        <div style="font-size:11px; color:#94a3b8;">
+          Adm: ${highlight(String(s.admission), query)}
+          &nbsp;·&nbsp; ${s.email}
+        </div>
+      </div>
+      <div style="font-size:10px; padding:2px 8px;
+                  border-radius:8px; font-weight:600;
+                  background:${s.active ? '#dcfce7' : '#fee2e2'};
+                  color:${s.active ? '#166534' : '#991b1b'};">
+        ${s.active ? 'Active' : 'Inactive'}
+      </div>
+    </div>
+  `).join('');
+
+  dropdown.style.display = 'block';
+}
+
+function highlight(text, query) {
+  if (!query) return text;
+  const regex   = new RegExp(`(${query})`, 'gi');
+  return text.replace(regex,
+    '<mark style="background:#fef9c3;color:#854d0e;'
+    + 'border-radius:2px;padding:0 1px;">$1</mark>'
+  );
+}
+
+function selectAutocomplete(admission, name) {
+  searchInput.value          = admission;
+  dropdown.style.display     = 'none';
+  filterTableRows(admission);
+}
+
+// ── Init ───────────────────────────────────────────────────
+// If query exists on load, filter the table immediately
+document.addEventListener('DOMContentLoaded', function() {
+  const q = searchInput.value.trim().toLowerCase();
+  if (q) filterTableRows(q);
+});
+</script>
 {% endblock %}

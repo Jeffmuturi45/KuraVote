@@ -70,6 +70,11 @@ urlpatterns = [
         name='admin_dashboard'
     ),
     path(
+        'admin-panel/students/bulk-action/',
+        views.admin_students_bulk_action,
+        name='admin_students_bulk_action'
+    ),
+    path(
         'admin-panel/elections/',
         views.admin_elections,
         name='admin_elections'
