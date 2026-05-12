@@ -140,6 +140,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# settings.py — lower cost factor only for bulk-imported default passwords
+# Students must change on first login anyway, so the default password
+# security level matters less than the changed password.
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

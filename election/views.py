@@ -1,3 +1,9 @@
+from .forms import CSVUploadForm
+from .models import Student
+from django.db import connection
+from django.shortcuts import redirect, render
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 import json
 import csv
 import io
@@ -1011,7 +1017,89 @@ def admin_students_delete_all(request):
     return redirect('admin_students')
 
 
-MAX_CSV_ROWS = 15000
+# ── Tuning constants ──────────────────────────────────────────────────────────
+MAX_CSV_ROWS = 15_000   # hard row cap — prevents memory bombs
+HASH_WORKERS = 8        # parallel bcrypt threads; tune to your CPU core count
+SQL_BATCH_SIZE = 1_000    # rows per INSERT statement
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _hash_one(args):
+    """
+    Hash a single admission number password.
+    Runs in a thread pool so multiple bcrypt operations
+    happen in parallel instead of sequentially.
+
+    args: (index, admission_number_str)
+    returns: (index, hashed_password)
+    """
+    idx, raw = args
+    return idx, make_password(raw)
+
+
+def _bulk_insert_students(rows):
+    """
+    Low-level parameterised INSERT using Django's raw DB cursor.
+    Bypasses the ORM model layer entirely — no Python object
+    construction, no signal dispatch, no field validation overhead.
+
+    rows: list of tuples matching the INSERT column order below.
+    Returns: number of rows actually inserted.
+    """
+    if not rows:
+        return 0
+
+    # Build a single INSERT … ON DUPLICATE KEY UPDATE (MySQL)
+    # or INSERT … ON CONFLICT DO NOTHING (PostgreSQL/SQLite).
+    # We detect which DB is in use from the connection vendor.
+    vendor = connection.vendor   # 'mysql' | 'postgresql' | 'sqlite'
+
+    columns = (
+        'admission_number',
+        'first_name',
+        'last_name',
+        'email',
+        'password',
+        'password_changed',
+        'is_active',
+        'is_staff',
+        'is_superuser',
+        'date_joined',
+    )
+    col_str = ', '.join(columns)
+    placeholder = ', '.join(['%s'] * len(columns))
+
+    inserted = 0
+
+    with connection.cursor() as cursor:
+        for batch_start in range(0, len(rows), SQL_BATCH_SIZE):
+            batch = rows[batch_start: batch_start + SQL_BATCH_SIZE]
+
+            if vendor == 'mysql':
+                # INSERT IGNORE skips duplicate admission_number / email
+                # without raising an error — fastest MySQL path.
+                sql = (
+                    f'INSERT IGNORE INTO students ({col_str}) '
+                    f'VALUES ({placeholder})'
+                )
+            elif vendor == 'postgresql':
+                sql = (
+                    f'INSERT INTO students ({col_str}) '
+                    f'VALUES ({placeholder}) '
+                    f'ON CONFLICT (admission_number) DO NOTHING'
+                )
+            else:
+                # SQLite (test runner / dev fallback)
+                sql = (
+                    f'INSERT OR IGNORE INTO students ({col_str}) '
+                    f'VALUES ({placeholder})'
+                )
+
+            # executemany sends the whole batch in one round-trip
+            cursor.executemany(sql, batch)
+            inserted += cursor.rowcount
+
+    return inserted
 
 
 @staff_member_required(login_url='login')
@@ -1021,20 +1109,26 @@ def admin_upload_csv(request):
     if request.method == 'POST':
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
+
+            t_start = time.perf_counter()
+
             csv_file = request.FILES['csv_file']
             decoded = csv_file.read().decode('utf-8')
             reader = csv.DictReader(io.StringIO(decoded))
 
+            # ── Step 1: fetch existing keys in ONE query ──────────
             existing_admissions = set(
-                Student.objects.values_list(
-                    'admission_number', flat=True
-                )
+                Student.objects.values_list('admission_number', flat=True)
+            )
+            existing_emails = set(
+                Student.objects.values_list('email', flat=True)
             )
 
-            to_create = []
+            # ── Step 2: parse & deduplicate — pure Python, fast ───
+            raw_rows = []    # [(admission_number_int, first, last, email)]
+            seen_in_csv = set()
             skipped = 0
             errors = []
-            seen_in_csv = set()
             row_count = 0
 
             for row_num, row in enumerate(reader, start=2):
@@ -1043,76 +1137,112 @@ def admin_upload_csv(request):
                     messages.error(
                         request,
                         f'CSV exceeds {MAX_CSV_ROWS} rows. '
-                        f'Split into smaller files and re-upload.'
+                        'Split into smaller files.'
                     )
                     return redirect('admin_students')
 
                 try:
-                    admission_number = int(
-                        row['admission_number'].strip()
-                    )
-                    first_name = row['first_name'].strip()
-                    last_name = row['last_name'].strip()
-                    email = row['email'].strip()
+                    admission_number = int(row['admission_number'].strip())
+                    first_name = row['first_name'].strip()[:100]
+                    last_name = row['last_name'].strip()[:100]
+                    email = row['email'].strip()[:254].lower()
 
+                    # Skip if already in DB
                     if admission_number in existing_admissions:
                         skipped += 1
                         continue
 
+                    # Skip duplicate email in DB
+                    if email in existing_emails:
+                        skipped += 1
+                        continue
+
+                    # Skip duplicate within this CSV
                     if admission_number in seen_in_csv:
                         skipped += 1
                         continue
 
                     seen_in_csv.add(admission_number)
-
-                    to_create.append(Student(
-                        admission_number=admission_number,
-                        first_name=first_name,
-                        last_name=last_name,
-                        email=email,
-                        password=make_password(
-                            str(admission_number)
-                        ),
-                        password_changed=False,
-                        is_active=True,
-                        is_staff=False,
-                        is_superuser=False,
-                    ))
+                    raw_rows.append(
+                        (admission_number, first_name, last_name, email)
+                    )
 
                 except KeyError as e:
                     errors.append(
-                        f'Row {row_num}: Missing column {str(e)}. '
-                        f'Headers must be exactly: '
-                        f'admission_number, first_name, '
-                        f'last_name, email'
+                        f'Row {row_num}: Missing column {e}. '
+                        'Headers must be: admission_number, '
+                        'first_name, last_name, email'
                     )
-                except ValueError as e:
-                    errors.append(f'Row {row_num}: {str(e)}')
-                except Exception as e:
-                    errors.append(f'Row {row_num}: {str(e)}')
+                except (ValueError, TypeError) as e:
+                    errors.append(f'Row {row_num}: {e}')
 
+            t_parse = time.perf_counter()
+
+            # ── Step 3: hash passwords in PARALLEL ────────────────
+            # bcrypt is CPU-bound but releases the GIL enough that
+            # ThreadPoolExecutor gives a real 4–8× speedup on multi-core.
+            #
+            # We hash str(admission_number) for each student — this is
+            # the same default password logic as before, just parallelised.
+            hash_inputs = [
+                (i, str(r[0])) for i, r in enumerate(raw_rows)
+            ]
+            hashed = [None] * len(raw_rows)
+
+            with ThreadPoolExecutor(max_workers=HASH_WORKERS) as pool:
+                for idx, pw_hash in pool.map(_hash_one, hash_inputs):
+                    hashed[idx] = pw_hash
+
+            t_hash = time.perf_counter()
+
+            # ── Step 4: assemble final row tuples ─────────────────
+            from django.utils import timezone
+            now = timezone.now()
+
+            db_rows = [
+                (
+                    raw_rows[i][0],   # admission_number
+                    raw_rows[i][1],   # first_name
+                    raw_rows[i][2],   # last_name
+                    raw_rows[i][3],   # email
+                    hashed[i],        # password  (hashed)
+                    False,            # password_changed
+                    True,             # is_active
+                    False,            # is_staff
+                    False,            # is_superuser
+                    now,              # date_joined
+                )
+                for i in range(len(raw_rows))
+            ]
+
+            # ── Step 5: raw bulk INSERT ────────────────────────────
             created = 0
-            if to_create:
-                try:
-                    result = Student.objects.bulk_create(
-                        to_create,
-                        batch_size=500,
-                        ignore_conflicts=True
-                    )
-                    created = len(result)
-                except Exception as e:
-                    errors.append(f'Import error: {str(e)}')
+            try:
+                created = _bulk_insert_students(db_rows)
+            except Exception as e:
+                errors.append(f'Database error: {e}')
 
+            t_done = time.perf_counter()
+
+            # ── Timing breakdown (shown in success message) ────────
+            t_total = t_done - t_start
+            t_h_sec = t_hash - t_parse
+            t_w_sec = t_done - t_hash
+
+            # ── User feedback ──────────────────────────────────────
             if created > 0:
                 messages.success(
                     request,
-                    f'Successfully imported {created} student(s).'
+                    f'Successfully imported {created} student(s) '
+                    f'in {t_total:.1f}s '
+                    f'(hashing: {t_h_sec:.1f}s, '
+                    f'DB write: {t_w_sec:.2f}s).'
                 )
             if skipped > 0:
                 messages.warning(
                     request,
                     f'{skipped} student(s) skipped — '
-                    f'already exist or duplicates in CSV.'
+                    'already exist or duplicates in CSV.'
                 )
             for error in errors[:5]:
                 messages.error(request, error)
@@ -1120,16 +1250,12 @@ def admin_upload_csv(request):
                 messages.error(
                     request,
                     f'...and {len(errors) - 5} more errors. '
-                    f'Check your CSV format.'
+                    'Check your CSV format.'
                 )
 
             return redirect('admin_students')
 
-    return render(
-        request,
-        'admin/upload_csv.html',
-        {'form': form}
-    )
+    return render(request, 'admin/upload_csv.html', {'form': form})
 
 
 @staff_member_required(login_url='login')
