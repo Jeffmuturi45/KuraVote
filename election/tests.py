@@ -1,6 +1,7 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
+from django.core.cache import cache
 from datetime import timedelta
 
 from .models import (
@@ -324,6 +325,52 @@ class VoteIntegrityTest(TestCase):
         )
         self.assertEqual(self.candidate.vote_count, 1)
         self.assertEqual(self.candidate.vote_percentage, 100.0)
+
+    def test_vote_invalidates_results_cache(self):
+        cache_key = f'results_api_{self.election.id}'
+        cache.set(cache_key, {'stale': True}, timeout=30)
+
+        self.client.force_login(self.student)
+        self.client.post(
+            reverse('cast_vote'),
+            {f'vote_{self.position.id}': self.candidate.id},
+            follow=True
+        )
+
+        self.assertIsNone(cache.get(cache_key))
+
+    def test_results_api_uses_fresh_annotated_totals(self):
+        admin = Student.objects.create(
+            admission_number=100001,
+            first_name='Admin',
+            last_name='Tester',
+            email='admin-results@school.ac.ke',
+            is_staff=True,
+            is_superuser=True,
+            password_changed=True,
+        )
+        admin.set_password('adminpass')
+        admin.save()
+        Vote.objects.create(
+            student=self.student,
+            candidate=self.candidate,
+            position=self.position,
+            election=self.election,
+        )
+
+        self.client.force_login(admin)
+        response = self.client.get(
+            reverse('admin_results_api', args=[self.election.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['positions'][0]['total_votes'], 1)
+        self.assertEqual(data['positions'][0]['candidates'][0]['votes'], 1)
+        self.assertEqual(
+            data['positions'][0]['candidates'][0]['percentage'],
+            100.0
+        )
 
     def test_unique_together_constraint(self):
         from django.db import IntegrityError

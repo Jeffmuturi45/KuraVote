@@ -357,6 +357,7 @@ def cast_vote(request):
                     position=position,
                     election=election
                 )
+                cache.delete(f'results_api_{election.id}')
                 saved += 1
 
         except (Position.DoesNotExist, Candidate.DoesNotExist):
@@ -1328,13 +1329,11 @@ def admin_results_api(request, election_id):
 
     data = []
     for position in positions:
-        candidates = sorted(
-            Candidate.objects.filter(
-                position=position
-            ).select_related('student'),
-            key=lambda c: c.vote_count,
-            reverse=True
-        )
+        candidates = Candidate.objects.filter(
+            position=position
+        ).select_related('student').annotate(
+            votes_total=Count('votes')
+        ).order_by('-votes_total', 'student__last_name')
         pos_total = Vote.objects.filter(position=position).count()
         data.append({
             'position_id':   position.id,
@@ -1346,8 +1345,11 @@ def admin_results_api(request, election_id):
                     'name':       c.student.get_full_name(),
                     'initials':   c.get_initials(),
                     'color':      c.get_avatar_color(),
-                    'votes':      c.vote_count,
-                    'percentage': c.vote_percentage,
+                    'votes':      c.votes_total,
+                    'percentage': (
+                        round((c.votes_total / pos_total) * 100, 1)
+                        if pos_total else 0
+                    ),
                 }
                 for c in candidates
             ]

@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 import os
+import sys
 
 load_dotenv()
 
@@ -24,12 +26,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
+TESTING = 'test' in sys.argv
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '905d-102-206-97-30.ngrok-free.app']
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG or TESTING:
+        SECRET_KEY = 'unsafe-dev-test-secret-key-change-in-production'
+    else:
+        raise ImproperlyConfigured(
+            'SECRET_KEY must be set when DEBUG=False.'
+        )
+
+allowed_hosts_env = os.getenv('ALLOWED_HOSTS')
+if allowed_hosts_env:
+    ALLOWED_HOSTS = [
+        host.strip() for host in allowed_hosts_env.split(',')
+        if host.strip()
+    ]
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+    if TESTING:
+        ALLOWED_HOSTS.append('testserver')
 
 
 # Application definition
@@ -96,20 +115,32 @@ WSGI_APPLICATION = 'kuravote.wsgi.application'
 #     }
 # }
 
-DATABASES = {
-    'default': {
-        'ENGINE':   'django.db.backends.mysql',
-        'NAME':     os.getenv('DB_NAME'),
-        'USER':     os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST':     os.getenv('DB_HOST', 'localhost'),
-        'PORT':     os.getenv('DB_PORT', '3306'),
-        'OPTIONS': {
-            'charset': 'utf8mb4',        # supports all unicode + emojis
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",  # strict mode
-        },
+use_mysql = os.getenv('DB_NAME') and not (
+    TESTING and os.getenv('KURAVOTE_TEST_DB') != 'mysql'
+)
+
+if use_mysql:
+    DATABASES = {
+        'default': {
+            'ENGINE':   'django.db.backends.mysql',
+            'NAME':     os.getenv('DB_NAME'),
+            'USER':     os.getenv('DB_USER'),
+            'PASSWORD': os.getenv('DB_PASSWORD'),
+            'HOST':     os.getenv('DB_HOST', 'localhost'),
+            'PORT':     os.getenv('DB_PORT', '3306'),
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # ─── Custom Auth ─────────────────────────────────────────
 # Tells Django to use our custom Student model for auth
@@ -169,16 +200,16 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_SAVE_EVERY_REQUEST = True
 
 # Set these properly based on environment
-SESSION_COOKIE_SECURE = not DEBUG          # True in production
-CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = not (DEBUG or TESTING)
+CSRF_COOKIE_SECURE = not (DEBUG or TESTING)
 
 # ─── Security Headers ────────────────────────────────────
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
-SECURE_HSTS_PRELOAD = not DEBUG
-SECURE_SSL_REDIRECT = not DEBUG
+SECURE_HSTS_SECONDS = 0 if DEBUG or TESTING else 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not (DEBUG or TESTING)
+SECURE_HSTS_PRELOAD = not (DEBUG or TESTING)
+SECURE_SSL_REDIRECT = not (DEBUG or TESTING)
 X_FRAME_OPTIONS = 'DENY'
 
 # ─── Content Security Policy (add django-csp to requirements) ──
