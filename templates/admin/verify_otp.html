@@ -1,0 +1,76 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}KuraVote — Verify Identity{% endblock %}
+{% block page_title %}Two-Factor Verification{% endblock %}
+
+{% block admin_content %}
+<div class="row justify-content-center">
+  <div class="col-lg-4">
+    <div class="kura-card text-center">
+
+      <div style="width:64px;height:64px;border-radius:50%;
+                  background:#f0fdf4;border:2px solid #bbf7d0;
+                  display:flex;align-items:center;
+                  justify-content:center;margin:0 auto 20px;">
+        <i class="fa fa-mobile-alt"
+           style="font-size:1.6rem;color:#16a34a;"></i>
+      </div>
+
+      <h5 style="font-family:'Sora',sans-serif;color:#166534;
+                 margin-bottom:8px;">
+        Verify your identity
+      </h5>
+      <p style="font-size:0.82rem;color:#94a3b8;margin-bottom:24px;">
+        Enter the 6-digit code from your authenticator app.
+      </p>
+
+      <form method="POST" id="otp-form">
+        {% csrf_token %}
+        <input type="text"
+               name="token"
+               class="form-control form-control-lg text-center mb-3"
+               placeholder="000000"
+               maxlength="6"
+               inputmode="numeric"
+               pattern="[0-9]{6}"
+               autofocus
+               autocomplete="one-time-code"
+               style="font-size:1.8rem;font-family:'Sora',sans-serif;
+                      letter-spacing:0.5rem;border-color:#d1fae5;
+                      border-radius:12px;">
+        <button type="submit"
+                class="btn-kura w-100"
+                style="padding:12px;font-size:0.95rem;">
+          <i class="fa fa-check me-2"></i>
+          Verify
+        </button>
+      </form>
+
+      <div style="margin-top:20px;font-size:0.75rem;color:#94a3b8;">
+        <i class="fa fa-info-circle me-1"></i>
+        Codes refresh every 30 seconds.
+        Use Google Authenticator or Authy.
+      </div>
+
+      <a href="{% url 'logout' %}"
+         style="display:block;margin-top:16px;
+                font-size:0.78rem;color:#94a3b8;">
+        <i class="fa fa-sign-out-alt me-1"></i>
+        Log out instead
+      </a>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Auto-submit when 6 digits entered
+  document.querySelector('input[name="token"]')
+    .addEventListener('input', function () {
+      if (this.value.replace(/\D/g, '').length === 6) {
+        document.getElementById('otp-form').submit();
+      }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}KuraVote — Enable 2FA{% endblock %}
+{% block page_title %}Set Up Two-Factor Auth{% endblock %}
+
+{% block admin_content %}
+<div class="row justify-content-center">
+  <div class="col-lg-5">
+    <div class="kura-card">
+
+      <h5 style="font-family:'Sora',sans-serif;color:#166534;
+                 margin-bottom:4px;">
+        Enable Two-Factor Authentication
+      </h5>
+      <p style="color:#94a3b8;font-size:0.82rem;margin-bottom:24px;">
+        Scan this QR code with Google Authenticator or Authy,
+        then enter the code it shows to confirm.
+      </p>
+
+      <div class="text-center mb-4">
+        <img src="data:image/png;base64,{{ qr_b64 }}"
+             alt="OTP QR Code"
+             style="width:200px;height:200px;
+                    border:8px solid #fff;
+                    border-radius:12px;
+                    box-shadow:0 4px 24px rgba(0,0,0,0.1);">
+      </div>
+
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;
+                  border-radius:10px;padding:12px 14px;
+                  margin-bottom:20px;font-size:0.78rem;color:#166534;">
+        <strong>Can't scan?</strong> Enter this key manually:<br>
+        <code style="font-size:0.85rem;color:#16a34a;
+                     word-break:break-all;">
+          {{ device.key }}
+        </code>
+      </div>
+
+      <form method="POST">
+        {% csrf_token %}
+        <label class="form-label"
+               style="font-size:0.85rem;font-weight:500;">
+          Enter the 6-digit code to confirm
+        </label>
+        <input type="text"
+               name="token"
+               class="form-control form-control-lg text-center mb-3"
+               placeholder="000000"
+               maxlength="6"
+               inputmode="numeric"
+               autofocus
+               style="font-size:1.5rem;letter-spacing:0.4rem;
+                      border-color:#d1fae5;border-radius:12px;">
+        <button type="submit" class="btn-kura w-100"
+                style="padding:12px;">
+          <i class="fa fa-shield-alt me-2"></i>
+          Activate 2FA
+        </button>
+      </form>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

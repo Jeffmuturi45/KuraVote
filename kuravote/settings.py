@@ -45,6 +45,8 @@ INSTALLED_APPS = [
     # Third party
     'crispy_forms',
     'crispy_bootstrap5',
+    'django_otp',
+    'django_otp.plugins.otp_totp',
 
     # Our app
     'election',
@@ -60,6 +62,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_otp.middleware.OTPMiddleware',
+    'election.admin_2fa.AdminOTPMiddleware',
     # CORRECT — points to election/middleware.py
     'election.middleware.ForcePasswordChangeMiddleware',
 ]

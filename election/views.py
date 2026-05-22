@@ -1,3 +1,8 @@
+import base64
+import qrcode.image.svg
+import qrcode
+from django_otp import verify_token, user_has_device
+from django_otp.plugins.otp_totp.models import TOTPDevice
 from .forms import CSVUploadForm
 from .models import Student
 from django.db import connection
@@ -1784,3 +1789,83 @@ def admin_active_users_api(request):
 @staff_member_required(login_url='login')
 def admin_settings(request):
     return render(request, 'admin/settings.html')
+
+
+# ═══════════════════════════════════════════════
+# OTP VIEWS  (add to bottom of views.py)
+# ═══════════════════════════════════════════════
+
+
+@staff_member_required(login_url='login')
+def admin_setup_otp(request):
+    """First-time OTP device registration for admin."""
+    user = request.user
+
+    # Already has a device — go to verify
+    if user_has_device(user):
+        return redirect('admin_verify_otp')
+
+    # Create an unconfirmed device
+    device, created = TOTPDevice.objects.get_or_create(
+        user=user,
+        name='KuraVote Admin',
+        defaults={'confirmed': False}
+    )
+
+    if request.method == 'POST':
+        token = request.POST.get('token', '').strip()
+        if device.verify_token(token):
+            device.confirmed = True
+            device.save()
+            messages.success(
+                request,
+                'Two-factor authentication enabled successfully!'
+            )
+            return redirect('admin_dashboard')
+        else:
+            messages.error(request, 'Invalid code. Please try again.')
+
+    # Generate QR code for Google Authenticator / Authy
+    otp_url = device.config_url
+    qr = qrcode.make(otp_url)
+    buf = io.BytesIO()
+    qr.save(buf, format='PNG')
+    qr_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    return render(request, 'admin/setup_otp.html', {
+        'device':   device,
+        'qr_b64':   qr_b64,
+        'otp_url':  otp_url,
+    })
+
+
+@staff_member_required(login_url='login')
+def admin_verify_otp(request):
+    """Per-session OTP verification."""
+    if request.user.is_verified():
+        return redirect('admin_dashboard')
+
+    if request.method == 'POST':
+        token = request.POST.get('token', '').strip()
+
+        # Find the user's confirmed device
+        device = TOTPDevice.objects.filter(
+            user=request.user,
+            confirmed=True
+        ).first()
+
+        if device and device.verify_token(token):
+            # Mark session as OTP-verified
+            from django_otp import login as otp_login
+            otp_login(request, device)
+            messages.success(request, 'Verified. Welcome.')
+            return redirect(
+                request.GET.get('next', 'admin_dashboard')
+            )
+        else:
+            messages.error(
+                request,
+                'Invalid or expired code. Codes refresh every 30 seconds.'
+            )
+
+    return render(request, 'admin/verify_otp.html')
