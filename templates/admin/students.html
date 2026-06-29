@@ -994,6 +994,41 @@
                accept=".csv"
                style="display:none;">
 
+        <!-- File preview card -->
+        <div id="csv-preview"
+             style="display:none; align-items:center; gap:12px;
+                    background:#f0fdf4; border:1px solid #86efac;
+                    border-radius:12px; padding:14px 16px;
+                    margin-bottom:16px;">
+          <div style="width:40px; height:40px; border-radius:10px;
+                      background:#dcfce7; display:flex;
+                      align-items:center; justify-content:center;
+                      flex-shrink:0;">
+            <i class="fa fa-file-csv"
+               style="font-size:1.2rem; color:#16a34a;"></i>
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div id="csv-preview-name"
+                 style="font-size:13px; font-weight:600;
+                        color:#166534; white-space:nowrap;
+                        overflow:hidden; text-overflow:ellipsis;">
+            </div>
+            <div id="csv-preview-size"
+                 style="font-size:11px; color:#94a3b8; margin-top:2px;">
+            </div>
+          </div>
+          <button type="button"
+                  onclick="removeCsvFile()"
+                  title="Remove file"
+                  style="background:#fef2f2; border:1px solid #fecaca;
+                         color:#dc2626; border-radius:8px;
+                         padding:6px 10px; cursor:pointer;
+                         font-size:12px; flex-shrink:0;
+                         display:flex; align-items:center; gap:4px;">
+            <i class="fa fa-times"></i> Remove
+          </button>
+        </div>
+
         <!-- Format hint -->
         <div style="background:#f0fdf4; border:1px solid #bbf7d0;
                     border-radius:10px; padding:12px 14px;
@@ -1036,8 +1071,10 @@
           <button type="submit"
                   id="csv-submit-btn"
                   class="btn-kura"
-                  style="flex:1; justify-content:center; padding:11px;">
-            <i class="fa fa-upload me-1"></i>Upload Students
+                  disabled
+                  style="flex:1; justify-content:center; padding:11px;
+                         opacity:0.5; cursor:not-allowed;">
+            <i class="fa fa-upload me-1"></i>Select a file first
           </button>
           <button type="button"
                   onclick="closeCsvModal()"
@@ -1507,6 +1544,11 @@ function handleCsvDrop(e) {
   if (e.dataTransfer.files.length && input) {
     input.files = e.dataTransfer.files;
     showCsvFileName(e.dataTransfer.files[0]);
+    const btn = document.getElementById('csv-submit-btn');
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor  = 'pointer';
+    btn.innerHTML = '<i class="fa fa-upload me-1"></i>Upload Students';
   }
 }
 
@@ -1514,7 +1556,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const csvInput = document.getElementById('csv-modal-input');
   if (csvInput) {
     csvInput.addEventListener('change', function () {
-      if (this.files[0]) showCsvFileName(this.files[0]);
+      if (this.files[0]) {
+        showCsvFileName(this.files[0]);
+        const btn = document.getElementById('csv-submit-btn');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor  = 'pointer';
+        btn.innerHTML = '<i class="fa fa-upload me-1"></i>Upload Students';
+      }
     });
   }
 
@@ -1541,12 +1590,29 @@ function showCsvFileName(file) {
   const size = file.size > 1024 * 1024
     ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
     : (file.size / 1024).toFixed(1) + ' KB';
-  const el = document.getElementById('csv-file-name');
-  el.textContent    = file.name + ' (' + size + ')';
-  el.style.display  = 'block';
-  const zone = document.getElementById('csv-drop-zone');
-  zone.style.borderColor = '#16a34a';
-  zone.style.background  = '#f0fdf4';
+
+  // Hide drop zone, show preview card
+  document.getElementById('csv-drop-zone').style.display = 'none';
+
+  const preview = document.getElementById('csv-preview');
+  document.getElementById('csv-preview-name').textContent = file.name;
+  document.getElementById('csv-preview-size').textContent = size;
+  preview.style.display = 'flex';
+}
+
+function removeCsvFile() {
+  // Reset input
+  const input = document.getElementById('csv-modal-input');
+  input.value = '';
+
+  // Hide preview, show drop zone again
+  document.getElementById('csv-preview').style.display = 'none';
+  document.getElementById('csv-drop-zone').style.display = 'block';
+
+  // Disable submit
+  document.getElementById('csv-submit-btn').disabled = true;
+  document.getElementById('csv-submit-btn').innerHTML =
+    '<i class="fa fa-upload me-1"></i>Select a file first';
 }
 
 // Close csv modal on backdrop click

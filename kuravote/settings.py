@@ -162,6 +162,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # security level matters less than the changed password.
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.MD5PasswordHasher',
     'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
 ]
 

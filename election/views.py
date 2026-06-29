@@ -1099,14 +1099,14 @@ SQL_BATCH_SIZE = 1_000    # rows per INSERT statement
 
 def _bulk_hash_passwords(raw_rows):
     """
-    Use PBKDF2 with reduced iterations for bulk import.
-    Students must change password on first login anyway.
-    This is ~50x faster than default bcrypt.
+    Hash using MD5 — fast and throwaway.
+    Students must change password on first login (password_changed=False).
+    MD5 is acceptable here because the password is public knowledge
+    (it's their admission number) and it expires on first login.
     """
-    from django.contrib.auth.hashers import PBKDF2PasswordHasher
-    hasher = PBKDF2PasswordHasher()
+    from django.contrib.auth.hashers import make_password
     return [
-        hasher.encode(str(row[0]), hasher.salt(), iterations=10000)
+        make_password(str(row[0]), hasher='md5')
         for row in raw_rows
     ]
 
