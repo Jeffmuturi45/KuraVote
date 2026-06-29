@@ -920,7 +920,15 @@ def admin_students_bulk_action(request):
         return redirect('admin_students')
 
     action = request.POST.get('action', '')
-    student_ids = request.POST.getlist('student_ids')
+    select_all_pages = request.POST.get('select_all_pages', '0') == '1'
+
+    # If select_all_pages, override student_ids with all non-staff students
+    if select_all_pages:
+        student_ids = list(
+            Student.objects.filter(is_staff=False).values_list('id', flat=True)
+        )
+    else:
+        student_ids = request.POST.getlist('student_ids')
 
     # ── Delete All ────────────────────────────────────────
     if action == 'delete_all':

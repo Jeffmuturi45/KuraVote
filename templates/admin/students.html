@@ -208,6 +208,33 @@
     <i class="fa fa-check-square me-2"></i>
     <span id="selected-count">0</span> student(s) selected
   </div>
+
+  <!-- Select all across pages banner -->
+  <div id="select-all-pages-banner"
+       style="display:none; width:100%; background:#dcfce7;
+              border:1px solid #86efac; border-radius:8px;
+              padding:8px 14px; margin-top:8px; font-size:12px;
+              color:#166534; display:none; align-items:center;
+              justify-content:space-between; gap:10px; flex-wrap:wrap;">
+    <span id="select-all-pages-msg"></span>
+    <div style="display:flex; gap:8px;">
+      <button type="button"
+              onclick="selectAllPages()"
+              id="select-all-pages-btn"
+              style="background:#16a34a; color:#fff; border:none;
+                     border-radius:7px; padding:5px 12px;
+                     font-size:12px; font-weight:600; cursor:pointer;">
+        Select All <span id="select-all-pages-count"></span> Students
+      </button>
+      <button type="button"
+              onclick="clearAllPagesSelection()"
+              style="background:#fff; color:#166534;
+                     border:1px solid #86efac; border-radius:7px;
+                     padding:5px 12px; font-size:12px; cursor:pointer;">
+        Clear Selection
+      </button>
+    </div>
+  </div>
   <div style="display:flex; gap:6px; flex-wrap:wrap;">
     <button onclick="bulkAction('activate')"
             class="tbl-btn tbl-btn-success"
@@ -916,6 +943,7 @@
       style="display:none;">
   {% csrf_token %}
   <input type="hidden" name="action" id="hidden-action">
+  <input type="hidden" name="select_all_pages" id="hidden-select-all-pages" value="0">
   <div id="hidden-student-ids"></div>
 </form>
 
@@ -1375,23 +1403,65 @@ function clearSelection() {
   updateBulkBar();
 }
 
+let allPagesSelected = false;
+const TOTAL_STUDENTS = {{ students.paginator.count }};
+
 function updateBulkBar() {
   const bar    = document.getElementById('bulk-actions-bar');
   const count  = document.getElementById('selected-count');
   const delBtn = document.getElementById('bulk-delete-btn');
   const delLbl = document.getElementById('bulk-delete-label');
-  const n      = selectedIds.size;
+  const banner = document.getElementById('select-all-pages-banner');
+  const msg    = document.getElementById('select-all-pages-msg');
+  const pgCount= document.getElementById('select-all-pages-count');
+  const n      = allPagesSelected ? TOTAL_STUDENTS : selectedIds.size;
 
   if (n > 0) {
     bar.style.display  = 'flex';
     count.textContent  = n;
     delBtn.disabled    = false;
     delLbl.textContent = `Delete (${n})`;
+
+    // Show banner only when all visible rows are checked and there are more pages
+    const visibleRows = document.querySelectorAll('.student-row:not([style*="display: none"])');
+    const allVisibleChecked = visibleRows.length > 0 &&
+      Array.from(visibleRows).every(r => r.querySelector('.row-checkbox').checked);
+
+    if (allVisibleChecked && TOTAL_STUDENTS > visibleRows.length && !allPagesSelected) {
+      msg.textContent = `All ${visibleRows.length} students on this page are selected.`;
+      pgCount.textContent = TOTAL_STUDENTS;
+      banner.style.display = 'flex';
+    } else if (allPagesSelected) {
+      msg.textContent = `All ${TOTAL_STUDENTS} students across all pages are selected.`;
+      pgCount.textContent = '';
+      document.getElementById('select-all-pages-btn').style.display = 'none';
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
   } else {
-    bar.style.display  = 'none';
-    delBtn.disabled    = true;
-    delLbl.textContent = 'Delete All';
+    bar.style.display    = 'none';
+    banner.style.display = 'none';
+    allPagesSelected     = false;
+    delBtn.disabled      = true;
+    delLbl.textContent   = 'Delete All';
   }
+}
+
+function selectAllPages() {
+  allPagesSelected = true;
+  document.getElementById('select-all-pages-btn').style.display = 'none';
+  document.getElementById('select-all-pages-msg').textContent =
+    `All ${TOTAL_STUDENTS} students across all pages are selected.`;
+  document.getElementById('selected-count').textContent = TOTAL_STUDENTS;
+  document.getElementById('bulk-delete-label').textContent = `Delete (${TOTAL_STUDENTS})`;
+}
+
+function clearAllPagesSelection() {
+  allPagesSelected = false;
+  clearSelection();
+  document.getElementById('select-all-pages-banner').style.display = 'none';
+  document.getElementById('select-all-pages-btn').style.display = 'block';
 }
 
 // ── Bulk actions ───────────────────────────────────────────
@@ -1423,14 +1493,17 @@ function submitBulkForm(action) {
   const actEl   = document.getElementById('hidden-action');
   const idsDiv  = document.getElementById('hidden-student-ids');
   actEl.value   = action;
+  document.getElementById('hidden-select-all-pages').value = allPagesSelected ? '1' : '0';
   idsDiv.innerHTML = '';
-  selectedIds.forEach(id => {
-    const inp  = document.createElement('input');
-    inp.type   = 'hidden';
-    inp.name   = 'student_ids';
-    inp.value  = id;
-    idsDiv.appendChild(inp);
-  });
+  if (!allPagesSelected) {
+    selectedIds.forEach(id => {
+      const inp  = document.createElement('input');
+      inp.type   = 'hidden';
+      inp.name   = 'student_ids';
+      inp.value  = id;
+      idsDiv.appendChild(inp);
+    });
+  }
   form.submit();
 }
 
