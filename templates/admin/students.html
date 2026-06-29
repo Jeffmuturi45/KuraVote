@@ -103,10 +103,10 @@
     </button>
 
     <!-- Upload CSV -->
-    <a href="{% url 'admin_upload_csv' %}" class="btn-kura">
-      <i class="fa fa-file-csv"></i>
-      Upload CSV
-    </a>
+<button onclick="openCsvModal()" class="btn-kura">
+  <i class="fa fa-file-csv"></i>
+  Upload CSV
+</button>
 
     <!-- Delete selected / all -->
     <button type="button"
@@ -476,11 +476,11 @@
                     <i class="fa fa-user-plus"></i>
                     Add Student
                   </button>
-                  <a href="{% url 'admin_upload_csv' %}"
+                  {% comment %} <a href="{% url 'admin_upload_csv' %}"
                      class="btn-kura-outline">
                     <i class="fa fa-file-csv"></i>
                     Upload CSV
-                  </a>
+                  </a> {% endcomment %}
                 </div>
               </div>
             </td>
@@ -919,6 +919,139 @@
   <div id="hidden-student-ids"></div>
 </form>
 
+
+<!-- ══════════════════════════════════════════════════════
+     CSV UPLOAD MODAL
+══════════════════════════════════════════════════════ -->
+<div id="csv-modal"
+     style="display:none; position:fixed; inset:0;
+            background:rgba(0,0,0,0.5); z-index:500;
+            align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:16px; padding:0;
+              max-width:520px; width:90%; overflow:hidden;
+              box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#14532d,#16a34a);
+                padding:20px 24px; display:flex;
+                align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-family:'Sora',sans-serif; font-size:1rem;
+                    font-weight:700; color:#fff;">
+          <i class="fa fa-file-csv me-2"></i>Upload Student CSV
+        </div>
+        <div style="font-size:12px; color:rgba(255,255,255,0.7);
+                    margin-top:2px;">
+          Duplicates are automatically skipped
+        </div>
+      </div>
+      <button onclick="closeCsvModal()"
+              style="background:rgba(255,255,255,0.15); border:none;
+                     color:#fff; width:32px; height:32px;
+                     border-radius:50%; cursor:pointer; font-size:14px;
+                     display:flex; align-items:center; justify-content:center;">
+        <i class="fa fa-times"></i>
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:24px;">
+      <form method="POST"
+            enctype="multipart/form-data"
+            action="{% url 'admin_upload_csv' %}"
+            id="csv-modal-form">
+        {% csrf_token %}
+
+        <!-- Drop zone -->
+        <div id="csv-drop-zone"
+             style="border:2px dashed #d1fae5; border-radius:12px;
+                    padding:28px; text-align:center; cursor:pointer;
+                    transition:all 0.2s; background:#fff;
+                    margin-bottom:16px;"
+             onclick="document.getElementById('csv-modal-input').click()"
+             ondragover="event.preventDefault();
+                         this.style.borderColor='#16a34a';
+                         this.style.background='#f0fdf4';"
+             ondragleave="this.style.borderColor='#d1fae5';
+                          this.style.background='#fff';"
+             ondrop="handleCsvDrop(event)">
+          <i class="fa fa-cloud-upload-alt"
+             style="font-size:2rem; color:#86efac;
+                    display:block; margin-bottom:8px;"></i>
+          <div style="font-weight:600; color:#166534; font-size:14px;
+                      margin-bottom:4px;">
+            Drop your CSV file here
+          </div>
+          <div style="font-size:12px; color:#94a3b8;">or click to browse</div>
+          <div id="csv-file-name"
+               style="margin-top:8px; font-size:12px;
+                      color:#16a34a; display:none;"></div>
+        </div>
+
+        <input type="file"
+               name="csv_file"
+               id="csv-modal-input"
+               accept=".csv"
+               style="display:none;">
+
+        <!-- Format hint -->
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0;
+                    border-radius:10px; padding:12px 14px;
+                    margin-bottom:20px; font-size:12px; color:#166534;">
+          <strong>Required columns:</strong>
+          <code style="background:#dcfce7; padding:1px 6px;
+                       border-radius:4px; margin-left:4px;">
+            admission_number, first_name, last_name, email
+          </code>
+        </div>
+
+        <!-- Progress bar (hidden until submit) -->
+        <div id="csv-progress"
+             style="display:none; margin-bottom:16px;">
+          <div style="background:#f0fdf4; border:1px solid #bbf7d0;
+                      border-radius:10px; padding:14px;">
+            <div style="display:flex; align-items:center; gap:10px;
+                        margin-bottom:8px;">
+              <div class="spinner-border spinner-border-sm"
+                   style="color:#16a34a;"></div>
+              <div style="font-size:13px; font-weight:600;
+                          color:#166534;" id="csv-status">
+                Reading file...
+              </div>
+            </div>
+            <div style="background:#d1fae5; border-radius:4px;
+                        height:6px; overflow:hidden;">
+              <div id="csv-bar"
+                   style="height:100%; background:#16a34a;
+                          border-radius:4px; width:0%;
+                          transition:width 0.5s ease;"></div>
+            </div>
+            <div style="font-size:11px; color:#94a3b8; margin-top:6px;">
+              Please wait — do not close this window.
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+          <button type="submit"
+                  id="csv-submit-btn"
+                  class="btn-kura"
+                  style="flex:1; justify-content:center; padding:11px;">
+            <i class="fa fa-upload me-1"></i>Upload Students
+          </button>
+          <button type="button"
+                  onclick="closeCsvModal()"
+                  class="btn-kura-outline"
+                  style="padding:11px 20px;">
+            Cancel
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -1350,5 +1483,79 @@ document.addEventListener('DOMContentLoaded', () => {
   const q = document.getElementById('search-input').value;
   if (q) applyFilters();
 });
+
+// ── CSV Upload Modal ───────────────────────────────────────
+function openCsvModal() {
+  document.getElementById('csv-modal').style.display = 'flex';
+}
+
+function closeCsvModal() {
+  document.getElementById('csv-modal').style.display = 'none';
+  document.getElementById('csv-modal-form').reset();
+  document.getElementById('csv-file-name').style.display = 'none';
+  document.getElementById('csv-drop-zone').style.borderColor = '#d1fae5';
+  document.getElementById('csv-drop-zone').style.background  = '#fff';
+  document.getElementById('csv-progress').style.display = 'none';
+}
+
+function handleCsvDrop(e) {
+  e.preventDefault();
+  const zone = document.getElementById('csv-drop-zone');
+  zone.style.borderColor = '#d1fae5';
+  zone.style.background  = '#fff';
+  const input = document.getElementById('csv-modal-input');
+  if (e.dataTransfer.files.length && input) {
+    input.files = e.dataTransfer.files;
+    showCsvFileName(e.dataTransfer.files[0]);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const csvInput = document.getElementById('csv-modal-input');
+  if (csvInput) {
+    csvInput.addEventListener('change', function () {
+      if (this.files[0]) showCsvFileName(this.files[0]);
+    });
+  }
+
+  const csvForm = document.getElementById('csv-modal-form');
+  if (csvForm) {
+    csvForm.addEventListener('submit', function () {
+      const btn    = document.getElementById('csv-submit-btn');
+      const prog   = document.getElementById('csv-progress');
+      const status = document.getElementById('csv-status');
+      const bar    = document.getElementById('csv-bar');
+
+      btn.disabled    = true;
+      btn.innerHTML   = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
+      prog.style.display = 'block';
+
+      setTimeout(() => { bar.style.width = '20%'; status.textContent = 'Parsing CSV rows...'; },    300);
+      setTimeout(() => { bar.style.width = '60%'; status.textContent = 'Checking for duplicates...'; }, 800);
+      setTimeout(() => { bar.style.width = '90%'; status.textContent = 'Writing to database...'; },  1500);
+    });
+  }
+});
+
+function showCsvFileName(file) {
+  const size = file.size > 1024 * 1024
+    ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+    : (file.size / 1024).toFixed(1) + ' KB';
+  const el = document.getElementById('csv-file-name');
+  el.textContent    = file.name + ' (' + size + ')';
+  el.style.display  = 'block';
+  const zone = document.getElementById('csv-drop-zone');
+  zone.style.borderColor = '#16a34a';
+  zone.style.background  = '#f0fdf4';
+}
+
+// Close csv modal on backdrop click
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('csv-modal')
+    .addEventListener('click', function(e) {
+      if (e.target === this) closeCsvModal();
+    });
+});
+
 </script>
 {% endblock %}
