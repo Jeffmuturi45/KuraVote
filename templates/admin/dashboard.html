@@ -78,7 +78,7 @@
         {{ active_users_count }}
       </div>
       <div class="stat-sub">students online</div>
-      <div style="margin-top:8px;" id="active-users-list">
+      {% comment %} <div style="margin-top:8px;" id="active-users-list">
         {% for user in active_users|slice:":3" %}
           <div style="font-size:10px; color:#94a3b8;
                       white-space:nowrap; overflow:hidden;
@@ -94,7 +94,12 @@
             + {{ active_users_count|add:"-3" }} more
           </div>
         {% endif %}
-      </div>
+      </div> {% endcomment %}
+      <div style="margin-top:8px;">
+  <div style="font-size:10px; color:#94a3b8;">
+    Live online tracking enabled
+  </div>
+</div>
     </div>
   </div>
 
