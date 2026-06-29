@@ -113,19 +113,19 @@ if os.environ.get('DATABASE_URL'):
     }
 else:
     DATABASES = {
-    'default': {
-        'ENGINE':   'django.db.backends.mysql',
-        'NAME':     os.getenv('DB_NAME'),
-        'USER':     os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST':     os.getenv('DB_HOST', 'localhost'),
-        'PORT':     os.getenv('DB_PORT', '3306'),
-        'OPTIONS': {
-            'charset': 'utf8mb4',        # supports all unicode + emojis
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",  # strict mode
-        },
+        'default': {
+            'ENGINE':   'django.db.backends.mysql',
+            'NAME':     os.getenv('DB_NAME'),
+            'USER':     os.getenv('DB_USER'),
+            'PASSWORD': os.getenv('DB_PASSWORD'),
+            'HOST':     os.getenv('DB_HOST', 'localhost'),
+            'PORT':     os.getenv('DB_PORT', '3306'),
+            'OPTIONS': {
+                'charset': 'utf8mb4',        # supports all unicode + emojis
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",  # strict mode
+            },
+        }
     }
-}
 
 # ─── Custom Auth ─────────────────────────────────────────
 # Tells Django to use our custom Student model for auth
@@ -236,7 +236,9 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 STATICFILES_STORAGE = (
     'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
 )
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # for production collectstatic
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# for production collectstatic
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
