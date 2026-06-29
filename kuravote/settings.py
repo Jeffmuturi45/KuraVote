@@ -113,18 +113,22 @@ if os.environ.get('DATABASE_URL'):
         )
     }
 else:
+    # Connection pooling — reuse DB connections instead of
+    # creating a new one per request
     DATABASES = {
         'default': {
             'ENGINE':   'django.db.backends.mysql',
             'NAME':     os.getenv('DB_NAME'),
             'USER':     os.getenv('DB_USER'),
             'PASSWORD': os.getenv('DB_PASSWORD'),
-            'HOST':     os.getenv('DB_HOST', 'localhost'),
-            'PORT':     os.getenv('DB_PORT', '3306'),
+            'HOST':     os.getenv('DB_HOST', default='localhost'),
+            'PORT':     os.getenv('DB_PORT', default='3306'),
             'OPTIONS': {
-                'charset': 'utf8mb4',        # supports all unicode + emojis
-                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",  # strict mode
+                'charset': 'utf8mb4',
+                'connect_timeout': 10,
             },
+            'CONN_MAX_AGE': 60,  # ← Keep DB connections alive for 60s
+            #   instead of closing after each request
         }
     }
 

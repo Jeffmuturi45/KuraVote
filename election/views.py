@@ -653,68 +653,65 @@ def admin_election_delete(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_election_activate(request, pk):
+    from .utils import invalidate_active_election
     election = get_object_or_404(Election, pk=pk)
+
     if Election.objects.filter(
         status=Election.STATUS_ACTIVE
     ).exists():
         messages.error(
             request,
             'Another election is already active. '
-            'Please close it before activating a new one.'
+            'Please close it first.'
         )
         return redirect('admin_elections')
 
     election.status = Election.STATUS_ACTIVE
     election.save()
+    invalidate_active_election()   # ← clear election cache
 
-    # Notify all active students
-    students = Student.objects.filter(
-        is_staff=False, is_active=True
-    )
+    students = Student.objects.filter(is_staff=False, is_active=True)
     create_bulk_notifications(
         students=students,
         title='Election Started',
         message=(
             f'"{election.election_name}" is now open for voting. '
-            f'Log in and cast your vote before '
+            f'Vote before '
             f'{election.end_date.strftime("%d %B %Y at %I:%M %p")}.'
         ),
         notif_type='info',
     )
-
     messages.success(
         request,
-        f'"{election.election_name}" is now active. '
-        f'Voting has started.'
+        f'"{election.election_name}" is now active.'
     )
     return redirect('admin_elections')
 
 
 @staff_member_required(login_url='login')
 def admin_election_close(request, pk):
+    from .utils import invalidate_active_election
     election = get_object_or_404(Election, pk=pk)
     election.status = Election.STATUS_CLOSED
     election.save()
+    invalidate_active_election()   # ← clear election cache
 
-    # Notify all active students
-    students = Student.objects.filter(
-        is_staff=False, is_active=True
-    )
+    # Clear results cache for this election
+    cache.delete(f'results_api_{pk}')
+
+    students = Student.objects.filter(is_staff=False, is_active=True)
     create_bulk_notifications(
         students=students,
         title='Election Closed',
         message=(
             f'"{election.election_name}" has ended. '
-            f'Results are now available. '
-            f'Check the results page to see the outcome.'
+            f'Check the results page.'
         ),
         notif_type='warning',
     )
-
     messages.success(
         request,
-        f'"{election.election_name}" has been closed. '
-        f'Voting has ended.'
+        f'"{election.election_name}" has been closed.'
     )
     return redirect('admin_elections')
 
@@ -843,40 +840,37 @@ def admin_candidate_delete(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_students(request):
+    from .utils import get_student_stats
+
     students = Student.objects.filter(
         is_staff=False
+    ).only(
+        'id', 'admission_number', 'first_name', 'last_name',
+        'email', 'is_active', 'password_changed', 'date_joined'
     ).order_by('admission_number')
 
     query = request.GET.get('q', '')
     if query:
-        students = students.filter(
-            admission_number__icontains=query
-        ) | students.filter(
-            first_name__icontains=query
-        ) | students.filter(
-            last_name__icontains=query
-        ) | students.filter(
-            email__icontains=query
+        students = (
+            students.filter(admission_number__icontains=query) |
+            students.filter(first_name__icontains=query) |
+            students.filter(last_name__icontains=query) |
+            students.filter(email__icontains=query)
         )
 
-    # Stats
-    all_students = Student.objects.filter(is_staff=False)
-    active_count = all_students.filter(is_active=True).count()
-    inactive_count = all_students.filter(is_active=False).count()
-    default_password_count = all_students.filter(
-        password_changed=False
-    ).count()
+    # Use cached stats — avoids 3 extra DB queries on every page load
+    stats = get_student_stats()
 
     paginator = Paginator(students, 25)
     page = request.GET.get('page', 1)
     students = paginator.get_page(page)
 
     return render(request, 'admin/students.html', {
-        'students':              students,
-        'query':                 query,
-        'active_count':          active_count,
-        'inactive_count':        inactive_count,
-        'default_password_count': default_password_count,
+        'students':               students,
+        'query':                  query,
+        'active_count':           stats['active'],
+        'inactive_count':         stats['inactive'],
+        'default_password_count': stats['default_password'],
     })
 
 
@@ -919,43 +913,49 @@ def admin_students_bulk_action(request):
     if request.method != 'POST':
         return redirect('admin_students')
 
-    action = request.POST.get('action', '')
+    action = request.POST.get('action', '').strip()
+    student_ids = request.POST.getlist('student_ids')
     select_all_pages = request.POST.get('select_all_pages', '0') == '1'
 
-    # If select_all_pages, override student_ids with all non-staff students
-    if select_all_pages:
-        student_ids = list(
-            Student.objects.filter(is_staff=False).values_list('id', flat=True)
-        )
-    else:
-        student_ids = request.POST.getlist('student_ids')
+    from django.contrib.admin.models import LogEntry
 
     # ── Delete All ────────────────────────────────────────
     if action == 'delete_all':
-        from django.contrib.admin.models import LogEntry
-        ids = list(
-            Student.objects.filter(
-                is_staff=False
-            ).values_list('id', flat=True)
-        )
-        LogEntry.objects.filter(user_id__in=ids).delete()
-        count = Student.objects.filter(is_staff=False).delete()[0]
-        messages.success(
-            request,
-            f'All {count} students deleted successfully.'
-        )
+        try:
+            all_ids = list(
+                Student.objects.filter(
+                    is_staff=False
+                ).values_list('id', flat=True)
+            )
+            if all_ids:
+                LogEntry.objects.filter(
+                    user_id__in=all_ids
+                ).delete()
+                deleted, _ = Student.objects.filter(
+                    is_staff=False
+                ).delete()
+                messages.success(
+                    request,
+                    f'All {deleted} students deleted successfully.'
+                )
+            else:
+                messages.warning(request, 'No students to delete.')
+        except Exception as e:
+            messages.error(request, f'Error deleting students: {str(e)}')
         return redirect('admin_students')
 
-    # ── Validate selection ────────────────────────────────
-    if not student_ids:
-        messages.error(request, 'No students selected.')
-        return redirect('admin_students')
+    # ── Select all pages action ───────────────────────────
+    if select_all_pages:
+        students = Student.objects.filter(is_staff=False)
+    else:
+        if not student_ids:
+            messages.error(request, 'No students selected.')
+            return redirect('admin_students')
+        students = Student.objects.filter(
+            pk__in=student_ids,
+            is_staff=False
+        )
 
-    # Only non-staff students
-    students = Student.objects.filter(
-        pk__in=student_ids,
-        is_staff=False
-    )
     count = students.count()
 
     if count == 0:
@@ -980,12 +980,17 @@ def admin_students_bulk_action(request):
 
     # ── Bulk Reset Password ───────────────────────────────
     elif action == 'reset_password':
-        for student in students:
-            student.set_password(str(student.admission_number))
-            student.password_changed = False
-            student.save(
-                update_fields=['password', 'password_changed']
+        updated = 0
+        for student in students.iterator(chunk_size=100):
+            student.password = make_password(
+                str(student.admission_number)
             )
+            student.password_changed = False
+            updated += 1
+        # Bulk update in one query
+        Student.objects.filter(
+            pk__in=list(students.values_list('pk', flat=True))
+        ).update(password_changed=False)
         messages.success(
             request,
             f'Passwords reset for {count} student(s).'
@@ -993,23 +998,34 @@ def admin_students_bulk_action(request):
 
     # ── Bulk Delete ───────────────────────────────────────
     elif action == 'delete':
-        from django.contrib.admin.models import LogEntry
-        ids = list(students.values_list('id', flat=True))
-        LogEntry.objects.filter(user_id__in=ids).delete()
-        students.delete()
-        messages.success(
-            request,
-            f'{count} student(s) deleted successfully.'
-        )
+        try:
+            ids = list(students.values_list('id', flat=True))
+            LogEntry.objects.filter(user_id__in=ids).delete()
+            deleted, _ = students.delete()
+            messages.success(
+                request,
+                f'{deleted} student(s) deleted successfully.'
+            )
+        except Exception as e:
+            messages.error(
+                request,
+                f'Error deleting students: {str(e)}'
+            )
 
     else:
-        messages.error(request, 'Invalid action.')
+        messages.error(
+            request,
+            f'Unknown action: "{action}". '
+            f'Please try again.'
+        )
 
     return redirect('admin_students')
 
 
 @staff_member_required(login_url='login')
 def admin_student_create(request):
+    from .utils import invalidate_student_stats
+
     if request.method == 'POST':
         first_name = request.POST.get('first_name', '').strip()
         last_name = request.POST.get('last_name', '').strip()
@@ -1017,7 +1033,6 @@ def admin_student_create(request):
         email = request.POST.get('email', '').strip()
 
         errors = []
-
         if not first_name:
             errors.append('First name is required.')
         if not last_name:
@@ -1031,9 +1046,7 @@ def admin_student_create(request):
 
         if not errors:
             adm = int(admission_number)
-            if Student.objects.filter(
-                admission_number=adm
-            ).exists():
+            if Student.objects.filter(admission_number=adm).exists():
                 errors.append(
                     f'Admission number {adm} already exists.'
                 )
@@ -1058,6 +1071,10 @@ def admin_student_create(request):
             is_superuser=False,
             password_changed=False,
         )
+
+        # Invalidate stats cache immediately
+        invalidate_student_stats()
+
         messages.success(
             request,
             f'{first_name} {last_name} added successfully. '
@@ -1100,8 +1117,8 @@ def admin_students_delete_all(request):
 
 # ── Tuning constants ──────────────────────────────────────────────────────────
 # hard row cap — prevents memory bombs     # parallel bcrypt threads; tune to your CPU core count
-MAX_CSV_ROWS = 15_000
-SQL_BATCH_SIZE = 1_000    # rows per INSERT statement
+MAX_CSV_ROWS = 7_000_000
+SQL_BATCH_SIZE = 1_000_000    # rows per INSERT statement
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -1350,6 +1367,7 @@ def admin_reset_password(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_toggle_student(request, pk):
+    from .utils import invalidate_student_stats
     student = get_object_or_404(Student, pk=pk, is_staff=False)
     if request.method == 'POST':
         student.is_active = not student.is_active
@@ -1359,6 +1377,7 @@ def admin_toggle_student(request, pk):
             request,
             f'{student.get_full_name()} has been {status}.'
         )
+        invalidate_student_stats()   # ← add this
     return redirect('admin_students')
 
 
