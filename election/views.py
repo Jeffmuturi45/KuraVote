@@ -1290,11 +1290,7 @@ def admin_upload_csv(request):
             ]
 
             # ── Step 5: raw bulk INSERT ────────────────────────────
-            created = 0
-            try:
-                created = _bulk_insert_students(db_rows)
-            except Exception as e:
-                errors.append(f'Database error: {e}')
+            created = _bulk_insert_students(db_rows)
 
             t_done = time.perf_counter()
 
