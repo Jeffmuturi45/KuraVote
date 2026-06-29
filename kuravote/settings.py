@@ -102,7 +102,17 @@ WSGI_APPLICATION = 'kuravote.wsgi.application'
 #     }
 # }
 
-DATABASES = {
+# Switch between local MySQL and Render PostgreSQL
+if os.environ.get('DATABASE_URL'):
+    # Render (PostgreSQL)
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+        )
+    }
+else:
+    DATABASES = {
     'default': {
         'ENGINE':   'django.db.backends.mysql',
         'NAME':     os.getenv('DB_NAME'),
