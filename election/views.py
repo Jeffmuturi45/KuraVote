@@ -860,13 +860,24 @@ def admin_students(request):
             email__icontains=query
         )
 
+    # Stats
+    all_students = Student.objects.filter(is_staff=False)
+    active_count = all_students.filter(is_active=True).count()
+    inactive_count = all_students.filter(is_active=False).count()
+    default_password_count = all_students.filter(
+        password_changed=False
+    ).count()
+
     paginator = Paginator(students, 25)
     page = request.GET.get('page', 1)
     students = paginator.get_page(page)
 
     return render(request, 'admin/students.html', {
-        'students': students,
-        'query':    query,
+        'students':              students,
+        'query':                 query,
+        'active_count':          active_count,
+        'inactive_count':        inactive_count,
+        'default_password_count': default_password_count,
     })
 
 
@@ -987,6 +998,64 @@ def admin_students_bulk_action(request):
     else:
         messages.error(request, 'Invalid action.')
 
+    return redirect('admin_students')
+
+
+@staff_member_required(login_url='login')
+def admin_student_create(request):
+    if request.method == 'POST':
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        admission_number = request.POST.get('admission_number', '').strip()
+        email = request.POST.get('email', '').strip()
+
+        errors = []
+
+        if not first_name:
+            errors.append('First name is required.')
+        if not last_name:
+            errors.append('Last name is required.')
+        if not admission_number:
+            errors.append('Admission number is required.')
+        elif not admission_number.isdigit():
+            errors.append('Admission number must be digits only.')
+        if not email:
+            errors.append('Email is required.')
+
+        if not errors:
+            adm = int(admission_number)
+            if Student.objects.filter(
+                admission_number=adm
+            ).exists():
+                errors.append(
+                    f'Admission number {adm} already exists.'
+                )
+            elif Student.objects.filter(email=email).exists():
+                errors.append(
+                    f'Email {email} is already registered.'
+                )
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            return redirect('admin_students')
+
+        Student.objects.create(
+            admission_number=int(admission_number),
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            password=make_password(admission_number),
+            is_active=True,
+            is_staff=False,
+            is_superuser=False,
+            password_changed=False,
+        )
+        messages.success(
+            request,
+            f'{first_name} {last_name} added successfully. '
+            f'Default password is their admission number.'
+        )
     return redirect('admin_students')
 
 
@@ -1792,7 +1861,7 @@ def admin_settings(request):
 
 
 # ═══════════════════════════════════════════════
-# OTP VIEWS  (add to bottom of views.py)
+# OTP VIEWS
 # ═══════════════════════════════════════════════
 
 

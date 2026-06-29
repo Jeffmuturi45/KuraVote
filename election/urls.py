@@ -19,6 +19,12 @@ urlpatterns = [
         views.admin_setup_otp,
         name='admin_setup_otp'
     ),
+
+    path(
+        'admin-panel/students/create/',
+        views.admin_student_create,
+        name='admin_student_create'
+    ),
     path(
         'admin-panel/verify-otp/',
         views.admin_verify_otp,
