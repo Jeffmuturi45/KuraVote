@@ -176,6 +176,17 @@ urlpatterns = [
         name='admin_reset_password'
     ),
     path(
+        'admin-panel/notifications/',
+        views.admin_notifications,
+        name='admin_notifications'
+    ),
+    path(
+        'admin-panel/notifications/api/',
+        views.admin_notifications_api,
+        name='admin_notifications_api'
+    ),
+    path('tour/seen/', views.mark_tour_seen, name='mark_tour_seen'),
+    path(
         'admin-panel/students/<int:pk>/toggle-active/',
         views.admin_toggle_student,
         name='admin_toggle_student'

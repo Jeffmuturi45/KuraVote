@@ -1,0 +1,67 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}KuraVote — Notifications{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block page_title_2 %}Notifications{% endblock %}
+
+{% block admin_content %}
+
+<div class="section-header">
+  <div>
+    <div class="section-title">System Notifications</div>
+    <div class="section-sub">
+      {{ notifications.count }} notification{{ notifications.count|pluralize }}
+    </div>
+  </div>
+</div>
+
+{% for notif in notifications %}
+  <div style="background:#fff; border-radius:12px;
+              border:1.5px solid
+              {% if notif.notif_type == 'success' %}#86efac
+              {% elif notif.notif_type == 'warning' %}#fde68a
+              {% else %}#bbf7d0{% endif %};
+              padding:16px; margin-bottom:10px;
+              display:flex; align-items:flex-start; gap:14px;">
+
+    <div style="width:40px; height:40px; border-radius:10px;
+                flex-shrink:0; display:flex; align-items:center;
+                justify-content:center; font-size:1.1rem;
+                background:
+                {% if notif.notif_type == 'success' %}#f0fdf4
+                {% elif notif.notif_type == 'warning' %}#fefce8
+                {% else %}#f0fdf4{% endif %};">
+      <i class="fa
+         {% if notif.notif_type == 'success' %}fa-check-circle
+         {% elif notif.notif_type == 'warning' %}fa-exclamation-circle
+         {% else %}fa-info-circle{% endif %}"
+         style="color:
+         {% if notif.notif_type == 'success' %}#16a34a
+         {% elif notif.notif_type == 'warning' %}#eab308
+         {% else %}#16a34a{% endif %};"></i>
+    </div>
+
+    <div style="flex:1;">
+      <div style="font-size:0.95rem; font-weight:700; color:#1e293b;
+                  margin-bottom:4px;">
+        {{ notif.title }}
+      </div>
+      <div style="font-size:0.85rem; color:#64748b; line-height:1.5;
+                  margin-bottom:6px;">
+        {{ notif.message }}
+      </div>
+      <div style="font-size:0.75rem; color:#94a3b8;">
+        <i class="fa fa-clock me-1"></i>
+        {{ notif.created_at|timesince }} ago
+      </div>
+    </div>
+
+  </div>
+{% empty %}
+  <div class="empty-state">
+    <i class="fa fa-bell-slash"></i>
+    <p>No notifications yet.</p>
+  </div>
+{% endfor %}
+
+{% endblock %}

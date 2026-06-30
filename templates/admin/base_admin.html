@@ -145,21 +145,41 @@
         </div>
       </div>
       <div class="topbar-right">
-  {% if active_election %}
-    <div class="topbar-election-badge">
-      <span class="live-dot"></span>
-      {{ active_election.election_name }} — Active
-    </div>
-  {% endif %}
-  <div class="topbar-date">
-    <i class="fa fa-calendar-alt me-1"></i>
-    {% now "l, d F Y" %}
-  </div>
-  <div class="topbar-date" id="live-clock">
-    <i class="fa fa-clock me-1"></i>
-    <span id="clock-time">--:--:--</span>
-  </div>
-</div>
+        <!-- Notification Bell -->
+        <a href="{% url 'admin_notifications' %}"
+           style="position:relative; color:#64748b; text-decoration:none;
+                  width:34px; height:34px; border-radius:8px;
+                  display:flex; align-items:center; justify-content:center;
+                  background:#f0fdf4; transition:background 0.15s;"
+           onmouseover="this.style.background='#dcfce7'"
+           onmouseout="this.style.background='#f0fdf4'"
+           id="admin-notif-bell">
+          <i class="fa fa-bell" style="font-size:14px; color:#166534;"></i>
+          <span id="admin-notif-badge"
+                style="position:absolute; top:-4px; right:-4px;
+                       background:#dc2626; color:#fff; border-radius:50%;
+                       width:16px; height:16px; font-size:9px;
+                       font-weight:700; display:none; align-items:center;
+                       justify-content:center;">
+            0
+          </span>
+        </a>
+
+        {% if active_election %}
+          <div class="topbar-election-badge">
+            <span class="live-dot"></span>
+            {{ active_election.election_name }} — Active
+          </div>
+        {% endif %}
+        <div class="topbar-date">
+          <i class="fa fa-calendar-alt me-1"></i>
+          {% now "l, d F Y" %}
+        </div>
+        <div class="topbar-date" id="live-clock">
+          <i class="fa fa-clock me-1"></i>
+          <span id="clock-time">--:--:--</span>
+        </div>
+      </div>
     </header>
 
     <!-- Page Content -->
@@ -184,4 +204,27 @@
   updateClock();
   setInterval(updateClock, 1000);
 </script>
+
+<!-- Notification polling script -->
+<script>
+function fetchAdminNotifications() {
+  fetch("{% url 'admin_notifications_api' %}")
+    .then(r => r.json())
+    .then(data => {
+      const badge = document.getElementById('admin-notif-badge');
+      if (!badge) return;
+      if (data.count > 0) {
+        badge.textContent   = data.count > 9 ? '9+' : data.count;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+}
+fetchAdminNotifications();
+setInterval(fetchAdminNotifications, 15000);
+</script>
+
+<script src="{% static 'js/kuravote.js' %}"></script>
 {% endblock %}

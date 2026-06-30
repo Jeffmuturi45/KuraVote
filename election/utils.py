@@ -141,6 +141,15 @@ def create_notification(student, title, message,
         notif_type = notif_type,
     )
 
+def create_admin_notification(title, message, notif_type='info'):
+    from .models import Notification
+    Notification.objects.create(
+        student                = None,
+        is_admin_notification  = True,
+        title                  = title,
+        message                = message,
+        notif_type              = notif_type,
+    )
 
 def create_bulk_notifications(students, title,
                                message, notif_type='info'):

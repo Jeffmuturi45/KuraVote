@@ -1,6 +1,6 @@
 {% extends 'admin/base_admin.html' %}
 
-{% block title %}KuraVote — Dashboard{% endblock %}
+{% block title %}KuraVote — Admin Dashboard{% endblock %}
 {% block nav_dashboard %}active{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 {% block page_title_2 %}Dashboard{% endblock %}
@@ -78,7 +78,7 @@
         {{ active_users_count }}
       </div>
       <div class="stat-sub">students online</div>
-      {% comment %} <div style="margin-top:8px;" id="active-users-list">
+      <div style="margin-top:8px;" id="active-users-list">
         {% for user in active_users|slice:":3" %}
           <div style="font-size:10px; color:#94a3b8;
                       white-space:nowrap; overflow:hidden;
@@ -94,12 +94,7 @@
             + {{ active_users_count|add:"-3" }} more
           </div>
         {% endif %}
-      </div> {% endcomment %}
-      <div style="margin-top:8px;">
-  <div style="font-size:10px; color:#94a3b8;">
-    Live online tracking enabled
-  </div>
-</div>
+      </div>
     </div>
   </div>
 
@@ -139,6 +134,10 @@
       <div style="font-size:13px; opacity:0.85;">
         <i class="fa fa-chart-pie me-1"></i>
         {{ turnout }}% turnout
+      </div>
+      <div style="font-size:13px; opacity:0.85;">
+        <i class="fa fa-clock me-1"></i>
+        Ends {{ active_election.end_date|date:"d M Y, H:i" }}
       </div>
     </div>
   </div>
@@ -251,10 +250,18 @@
 
   <!-- Recent Elections -->
   <div class="col-xl-8 col-lg-7">
-    <div style="font-family:'Sora',sans-serif; font-size:13px;
-                font-weight:700; color:#166534; text-transform:uppercase;
-                letter-spacing:0.5px; margin-bottom:14px;">
-      Recent Elections
+    <div style="display:flex; justify-content:space-between;
+                align-items:center; margin-bottom:14px;">
+      <div style="font-family:'Sora',sans-serif; font-size:13px;
+                  font-weight:700; color:#166534; text-transform:uppercase;
+                  letter-spacing:0.5px;">
+        Recent Elections
+      </div>
+      <a href="{% url 'admin_elections' %}"
+         style="font-size:0.78rem; color:#16a34a; text-decoration:none;
+                font-weight:600;">
+        View All <i class="fa fa-arrow-right ms-1"></i>
+      </a>
     </div>
 
     <div class="kura-table">
@@ -283,13 +290,17 @@
                 </div>
               </td>
               <td>
-                <span class="badge-{{ election.status }}">
-                  {% if election.status == 'active' %}
+                {% if election.status == 'active' %}
+                  <span class="badge-active">
                     <span class="live-dot"
                           style="width:6px; height:6px;"></span>
-                  {% endif %}
-                  {{ election.get_status_display }}
-                </span>
+                    Active
+                  </span>
+                {% elif election.status == 'closed' %}
+                  <span class="badge-closed">Closed</span>
+                {% else %}
+                  <span class="badge-inactive">Inactive</span>
+                {% endif %}
               </td>
               <td style="font-size:13px; font-weight:600;
                          color:#166534;">
@@ -356,6 +367,15 @@
   </div>
 </div>
 
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+</style>
+
+{% endblock %}
+
 {% block extra_js %}
 <script>
 function fetchActiveUsers() {
@@ -370,8 +390,7 @@ function fetchActiveUsers() {
 
       if (data.users.length === 0) {
         listEl.innerHTML =
-          '<div style="font-size:10px;color:#94a3b8;">'
-          + 'No students online</div>';
+          '<div style="font-size:10px;color:#94a3b8;">No students online</div>';
         return;
       }
 
@@ -396,6 +415,73 @@ function fetchActiveUsers() {
 
 fetchActiveUsers();
 setInterval(fetchActiveUsers, 10000);
+
+function fetchAdminNotifications() {
+  fetch("{% url 'admin_notifications_api' %}")
+    .then(r => r.json())
+    .then(data => {
+      const badge = document.getElementById('admin-notif-badge');
+      if (!badge) return;
+      if (data.count > 0) {
+        badge.textContent   = data.count > 9 ? '9+' : data.count;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+}
+
+fetchAdminNotifications();
+setInterval(fetchAdminNotifications, 15000);
 </script>
-{% endblock %}
+
+<!-- ── First-time onboarding tour ── -->
+{% if not request.user.has_seen_tour or request.GET.retour %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    if (typeof startKuraTour !== 'function') return;
+    startKuraTour([
+      {
+        target: '.sidebar-brand',
+        title: 'Welcome, Administrator!',
+        text: "This is your KuraVote control center. Let's walk through the key areas."
+      },
+      {
+        target: '#admin-notif-bell',
+        title: 'Notifications',
+        text: "Get alerted here about new elections, turnout milestones, and important events."
+      },
+      {
+        target: '.sidebar-item[href*="students"]',
+        title: 'Manage Students',
+        text: "Add students one by one or upload a CSV in bulk. You can also activate, deactivate, and reset passwords here."
+      },
+      {
+        target: '.sidebar-item[href*="elections"]',
+        title: 'Manage Elections',
+        text: "Create elections, set start and end dates, then activate when ready. Only one election can be active at a time."
+      },
+      {
+        target: '.sidebar-item[href*="candidates"]',
+        title: 'Register Candidates',
+        text: "Add candidates to positions with their manifesto and photo."
+      },
+      {
+        target: '.sidebar-item[href*="results"]',
+        title: 'Live Results',
+        text: "Watch votes come in live with charts and turnout statistics as students vote."
+      },
+      {
+        target: '#live-clock',
+        title: "You're All Set!",
+        text: "That's the essentials. Explore the sidebar for more — Reports, Audit Log, and Settings. Welcome aboard!"
+      }
+    ]);
+  }, 600);
+});
+</script>
+{% endif %}
+
 {% endblock %}

@@ -38,6 +38,7 @@ class Student(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
+    has_seen_tour = models.BooleanField(default=False)
 
     objects = StudentManager()
 
@@ -315,8 +316,11 @@ class Notification(models.Model):
     student = models.ForeignKey(
         Student,
         on_delete=models.CASCADE,
-        related_name='notifications'
+        related_name='notifications',
+        null=True,
+        blank=True,
     )
+    is_admin_notification = models.BooleanField(default=False)
     title = models.CharField(max_length=100)
     message = models.TextField()
     notif_type = models.CharField(
@@ -332,7 +336,10 @@ class Notification(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['student', 'is_read']),
+            models.Index(fields=['is_admin_notification', 'is_read']),
         ]
 
     def __str__(self):
+        if self.is_admin_notification:
+            return f'[ADMIN] {self.title}'
         return f'{self.student.get_full_name()} — {self.title}'

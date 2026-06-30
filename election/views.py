@@ -4,7 +4,7 @@ import qrcode
 from django_otp import verify_token, user_has_device
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from .forms import CSVUploadForm
-from .models import Student
+from .models import Student, Notification
 from django.db import connection
 from django.shortcuts import redirect, render
 import time
@@ -372,22 +372,44 @@ def cast_vote(request):
 
     if saved > 0:
         plural = 's' if saved != 1 else ''
-        messages.success(
-            request,
-            f'Your votes have been submitted successfully! '
-            f'{saved} vote{plural} recorded.'
-        )
-        # Notify student of successful vote
-        create_notification(
-            student=request.user,
-            title='Vote Submitted Successfully',
-            message=(
-                f'Your {saved} vote{plural} for '
-                f'"{election.election_name}" have been '
-                f'recorded securely. Thank you for participating!'
-            ),
-            notif_type='success',
-        )
+    messages.success(
+        request,
+        f'Your votes have been submitted successfully! '
+        f'{saved} vote{plural} recorded.'
+    )
+    create_notification(
+        student=request.user,
+        title='Vote Submitted Successfully',
+        message=(
+            f'Your {saved} vote{plural} for '
+            f'"{election.election_name}" have been '
+            f'recorded securely. Thank you for participating!'
+        ),
+        notif_type='success',
+    )
+
+    # ── Notify admins at turnout milestones ────────────
+    from .utils import create_admin_notification
+    total_students = Student.objects.filter(is_staff=False).count()
+    voters_count = Vote.objects.filter(
+        election=election
+    ).values('student').distinct().count()
+    turnout = round((voters_count / total_students * 100), 1) \
+        if total_students > 0 else 0
+
+    for milestone in [25, 50, 75, 100]:
+        cache_key = f'turnout_milestone_{election.id}_{milestone}'
+        if turnout >= milestone and not cache.get(cache_key):
+            cache.set(cache_key, True, timeout=None)
+            create_admin_notification(
+                title=f'{milestone}% Turnout Reached',
+                message=(
+                    f'"{election.election_name}" has reached '
+                    f'{milestone}% voter turnout '
+                    f'({voters_count} of {total_students} students).'
+                ),
+                notif_type='success' if milestone == 100 else 'info',
+            )
 
     if errors:
         for error in errors:
@@ -612,7 +634,13 @@ def admin_election_create(request):
     if request.method == 'POST':
         form = ElectionForm(request.POST)
         if form.is_valid():
-            form.save()
+            election = form.save()
+            from .utils import create_admin_notification
+            create_admin_notification(
+                title='New Election Created',
+                message=f'"{election.election_name}" was created by {request.user.get_full_name()}.',
+                notif_type='info',
+            )
             messages.success(request, 'Election created successfully.')
             return redirect('admin_elections')
         else:
@@ -716,7 +744,45 @@ def admin_election_close(request, pk):
     return redirect('admin_elections')
 
 
+@staff_member_required(login_url='login')
+def admin_notifications(request):
+    notifications = Notification.objects.filter(
+        is_admin_notification=True
+    )
+    Notification.objects.filter(
+        is_admin_notification=True, is_read=False
+    ).update(is_read=True)
+    return render(request, 'admin/notifications.html', {
+        'notifications': notifications
+    })
+
+
+@staff_member_required(login_url='login')
+def admin_notifications_api(request):
+    unread = Notification.objects.filter(
+        is_admin_notification=True, is_read=False
+    ).values(
+        'id', 'title', 'message', 'notif_type', 'created_at'
+    )[:10]
+
+    return JsonResponse({
+        'count': Notification.objects.filter(
+            is_admin_notification=True, is_read=False
+        ).count(),
+        'notifications': [
+            {
+                'id':         n['id'],
+                'title':      n['title'],
+                'message':    n['message'],
+                'type':       n['notif_type'],
+                'created_at': n['created_at'].strftime('%d %b %Y, %H:%M'),
+            }
+            for n in unread
+        ],
+    })
+
 # ── Positions ─────────────────────────────────────────────
+
 
 @staff_member_required(login_url='login')
 def admin_positions(request):
@@ -1955,3 +2021,12 @@ def admin_verify_otp(request):
             )
 
     return render(request, 'admin/verify_otp.html')
+
+
+@login_required(login_url='login')
+def mark_tour_seen(request):
+    if request.method == 'POST':
+        request.user.has_seen_tour = True
+        request.user.save(update_fields=['has_seen_tour'])
+        return JsonResponse({'status': 'ok'})
+    return JsonResponse({'status': 'error'}, status=400)
