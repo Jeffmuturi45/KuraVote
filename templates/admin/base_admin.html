@@ -11,7 +11,7 @@
     <div class="sidebar-brand">
       <div style="font-family:'Sora',sans-serif; font-weight:700;
                   font-size:1.2rem; color:#fff; letter-spacing:-0.3px;">
-        Kura<span style="color:#eab308">Vote</span>
+        {{ system_name|default:"KuraVote" }}
       </div>
       <div style="font-size:9px; text-transform:uppercase;
                   letter-spacing:1.2px;
@@ -89,6 +89,11 @@
          class="sidebar-item {% block nav_audit %}{% endblock %}">
         <i class="fa fa-shield-alt"></i>
         <span>Audit Log</span>
+      </a>
+      <a href="{% url 'admin_tiebreak_log' %}"
+         class="sidebar-item {% block nav_tiebreak %}{% endblock %}">
+        <i class="fa fa-balance-scale"></i>
+        <span>Tiebreak Log</span>
       </a>
       <a href="{% url 'admin_settings' %}"
          class="sidebar-item {% block nav_settings %}{% endblock %}">

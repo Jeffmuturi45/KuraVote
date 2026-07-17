@@ -108,19 +108,21 @@
         <div style="display:flex; align-items:center; gap:10px;
                     background:rgba(255,255,255,0.1);
                     border-radius:10px; padding:10px 16px;">
-          <i class="fa fa-trophy" style="color:#eab308;
-             font-size:1.1rem;"></i>
+          <i class="fa fa-trophy" style="color:#eab308; font-size:1.1rem;"></i>
           <div>
-            <div style="font-size:10px;
-                        color:rgba(255,255,255,0.6);
-                        text-transform:uppercase;
-                        letter-spacing:0.5px;">
-              Winner
+            <div style="font-size:10px; color:rgba(255,255,255,0.6);
+                        text-transform:uppercase; letter-spacing:0.5px;">
+              {% if result.is_tied %}Tiebreak Winner{% else %}Winner{% endif %}
             </div>
-            <div style="font-size:14px; font-weight:700;
-                        color:#fff;">
+            <div style="font-size:14px; font-weight:700; color:#fff;">
               {{ result.winner.student.get_full_name }}
             </div>
+            {% if result.is_tied %}
+              <div style="font-size:10px; color:#fde68a; margin-top:2px;">
+                <i class="fa fa-balance-scale me-1"></i>
+                Tied with {{ result.tiebreak_info.tied_names }} — resolved by earliest vote
+              </div>
+            {% endif %}
           </div>
         </div>
       {% else %}

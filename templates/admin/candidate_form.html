@@ -1,47 +1,90 @@
 {% extends 'admin/base_admin.html' %}
 
-{% block title %}KuraVote — {{ action }} Candidate{% endblock %}
+{% block title %}{{ system_name }} — {{ action }} Candidate{% endblock %}
 {% block nav_candidates %}active{% endblock %}
 {% block page_title %}{{ action }} Candidate{% endblock %}
 
 {% block admin_content %}
-
 <div class="row justify-content-center">
   <div class="col-lg-7">
     <div class="kura-card">
 
       <div class="mb-4">
-        <h5 style="font-family:'Sora',sans-serif; color:#166534;
-                   margin-bottom:4px;">
+        <h5 style="font-family:'Sora',sans-serif;color:#166534;margin-bottom:4px;">
           {{ action }} Candidate
         </h5>
-        <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
-          A candidate must be a registered student assigned
-          to a specific position.
+        <p style="color:#94a3b8;font-size:0.82rem;margin:0;">
+          A candidate must be a registered student assigned to a specific position.
         </p>
       </div>
 
-      <form method="POST" enctype="multipart/form-data" novalidate>
+      <form method="POST" enctype="multipart/form-data" novalidate id="candidate-form">
         {% csrf_token %}
+
+        <!-- Hidden field to carry the selected student ID -->
+        <input type="hidden" name="student" id="student-id-field"
+               value="{% if candidate %}{{ candidate.student.id }}{% endif %}">
 
         <div class="row g-3">
 
+          <!-- ── Student Search (replaces 170k <select>) ── -->
           <div class="col-md-6">
-            <label class="form-label"
-                   style="font-size:0.85rem; font-weight:500;">
+            <label class="form-label" style="font-size:0.85rem;font-weight:500;">
               Student
             </label>
-            {{ form.student }}
+
+            <!-- Search box -->
+            <div style="position:relative;">
+              <input type="text" id="student-search-input"
+                     class="form-control"
+                     placeholder="Search by name or admission no..."
+                     autocomplete="off"
+                     value="{% if candidate %}{{ candidate.student.get_full_name }} ({{ candidate.student.admission_number }}){% endif %}">
+              <!-- Spinner -->
+              <span id="student-search-spinner"
+                    style="display:none;position:absolute;right:10px;top:50%;
+                           transform:translateY(-50%);color:#16a34a;font-size:12px;">
+                <i class="fa fa-circle-notch fa-spin"></i>
+              </span>
+            </div>
+
+            <!-- Dropdown results -->
+            <div id="student-search-results"
+                 style="display:none;position:absolute;z-index:200;width:100%;
+                        max-width:380px;background:#fff;border:1px solid #bbf7d0;
+                        border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.1);
+                        margin-top:4px;max-height:240px;overflow-y:auto;">
+            </div>
+
+            <!-- Selected indicator -->
+            <div id="student-selected-badge"
+                 style="display:{% if candidate %}flex{% else %}none{% endif %};
+                        align-items:center;gap:8px;margin-top:8px;
+                        background:#dcfce7;border-radius:8px;padding:8px 12px;">
+              <i class="fa fa-check-circle" style="color:#16a34a;"></i>
+              <span id="student-selected-name" style="font-size:13px;font-weight:500;color:#166534;">
+                {% if candidate %}{{ candidate.student.get_full_name }} ({{ candidate.student.admission_number }}){% endif %}
+              </span>
+              <button type="button" onclick="clearStudentSelection()"
+                      style="margin-left:auto;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;">
+                <i class="fa fa-times"></i>
+              </button>
+            </div>
+
             {% if form.student.errors %}
               <div class="text-danger mt-1" style="font-size:0.78rem;">
                 {{ form.student.errors.0 }}
               </div>
             {% endif %}
+            <div style="font-size:0.73rem;color:#94a3b8;margin-top:4px;">
+              <i class="fa fa-info-circle me-1"></i>
+              Type at least 2 characters to search — no more loading the full list.
+            </div>
           </div>
 
+          <!-- ── Position ── -->
           <div class="col-md-6">
-            <label class="form-label"
-                   style="font-size:0.85rem; font-weight:500;">
+            <label class="form-label" style="font-size:0.85rem;font-weight:500;">
               Position
             </label>
             {{ form.position }}
@@ -52,13 +95,11 @@
             {% endif %}
           </div>
 
+          <!-- ── Manifesto ── -->
           <div class="col-12">
-            <label class="form-label"
-                   style="font-size:0.85rem; font-weight:500;">
+            <label class="form-label" style="font-size:0.85rem;font-weight:500;">
               Manifesto
-              <span style="color:#94a3b8; font-weight:400;">
-                (optional — max 500 characters)
-              </span>
+              <span style="color:#94a3b8;font-weight:400;">(optional — max 500 characters)</span>
             </label>
             {{ form.manifesto }}
             {% if form.manifesto.errors %}
@@ -68,61 +109,47 @@
             {% endif %}
           </div>
 
+          <!-- ── Photo ── -->
           <div class="col-12">
-            <label class="form-label"
-                   style="font-size:0.85rem; font-weight:500;">
+            <label class="form-label" style="font-size:0.85rem;font-weight:500;">
               Candidate Photo
-              <span style="color:#94a3b8; font-weight:400;">
-                (optional — jpg/png, max 2MB)
-              </span>
+              <span style="color:#94a3b8;font-weight:400;">(optional — jpg/png, max 2MB)</span>
             </label>
 
             {% if candidate and candidate.has_photo %}
               <div class="mb-2 d-flex align-items-center gap-3">
                 <img src="{{ candidate.photo.url }}"
-                     style="width:60px; height:60px; border-radius:12px;
-                            object-fit:cover;">
-                <div style="font-size:0.78rem; color:#94a3b8;">
-                  Current photo. Upload a new one to replace it.
-                </div>
+                     style="width:60px;height:60px;border-radius:12px;object-fit:cover;">
+                <div style="font-size:0.78rem;color:#94a3b8;">Current photo. Upload a new one to replace it.</div>
               </div>
             {% endif %}
 
             {{ form.photo }}
             {% if form.photo.errors %}
-              <div class="text-danger mt-1" style="font-size:0.78rem;">
-                {{ form.photo.errors.0 }}
-              </div>
+              <div class="text-danger mt-1" style="font-size:0.78rem;">{{ form.photo.errors.0 }}</div>
             {% endif %}
-
-            <div style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">
+            <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px;">
               <i class="fa fa-info-circle me-1"></i>
-              If no photo is uploaded, the candidate's initials
-              will be shown automatically.
+              If no photo is uploaded, the candidate's initials will be shown automatically.
             </div>
           </div>
 
         </div>
 
         {% if form.non_field_errors %}
-          <div class="alert alert-danger py-2 mt-3"
-               style="font-size:0.82rem;">
+          <div class="alert alert-danger py-2 mt-3" style="font-size:0.82rem;">
             {{ form.non_field_errors.0 }}
           </div>
         {% endif %}
 
         <div class="d-flex gap-2 mt-4">
-          <button type="submit"
+          <button type="submit" id="submit-btn"
                   class="btn btn-primary px-4"
-                  style="background:#16a34a; border-color:#16a34a;
-                         border-radius:10px;">
-            <i class="fa fa-save me-2"></i>
-            Save Candidate
+                  style="background:#16a34a;border-color:#16a34a;border-radius:10px;">
+            <i class="fa fa-save me-2"></i>Save Candidate
           </button>
           <a href="{% url 'admin_candidates' %}"
-             class="btn"
-             style="border:1px solid #bbf7d0; color:#166534;
-                    border-radius:10px;">
+             class="btn" style="border:1px solid #bbf7d0;color:#166534;border-radius:10px;">
             Cancel
           </a>
         </div>
@@ -131,5 +158,104 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
+<script>
+let searchTimeout = null;
+const searchUrl = '{% url "admin_student_search_api" %}';
+
+const searchInput   = document.getElementById('student-search-input');
+const hiddenField   = document.getElementById('student-id-field');
+const results       = document.getElementById('student-search-results');
+const spinner       = document.getElementById('student-search-spinner');
+const badge         = document.getElementById('student-selected-badge');
+const badgeName     = document.getElementById('student-selected-name');
+
+searchInput.addEventListener('input', function() {
+  const q = this.value.trim();
+  clearTimeout(searchTimeout);
+
+  // If editing after selection, clear the hidden field
+  if (hiddenField.value) {
+    hiddenField.value = '';
+    badge.style.display = 'none';
+  }
+
+  if (q.length < 2) {
+    results.style.display = 'none';
+    return;
+  }
+
+  searchTimeout = setTimeout(() => doSearch(q), 250);
+});
+
+function doSearch(q) {
+  spinner.style.display = 'block';
+  fetch(`${searchUrl}?q=${encodeURIComponent(q)}`)
+    .then(r => r.json())
+    .then(data => {
+      spinner.style.display = 'none';
+      renderResults(data.results);
+    })
+    .catch(() => { spinner.style.display = 'none'; });
+}
+
+function renderResults(items) {
+  results.innerHTML = '';
+  if (!items.length) {
+    results.innerHTML = '<div style="padding:12px 16px;color:#94a3b8;font-size:13px;">No students found</div>';
+    results.style.display = 'block';
+    return;
+  }
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.textContent = item.text;
+    div.style.cssText = 'padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0fdf4;color:#1e293b;';
+    div.addEventListener('mouseover', () => div.style.background = '#f0fdf4');
+    div.addEventListener('mouseout',  () => div.style.background = '');
+    div.addEventListener('click', () => selectStudent(item));
+    results.appendChild(div);
+  });
+  results.style.display = 'block';
+}
+
+function selectStudent(item) {
+  hiddenField.value       = item.id;
+  searchInput.value       = item.text;
+  badgeName.textContent   = item.text;
+  badge.style.display     = 'flex';
+  results.style.display   = 'none';
+}
+
+function clearStudentSelection() {
+  hiddenField.value     = '';
+  searchInput.value     = '';
+  badge.style.display   = 'none';
+  searchInput.focus();
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', e => {
+  if (!searchInput.contains(e.target) && !results.contains(e.target)) {
+    results.style.display = 'none';
+  }
+});
+
+// Validate on submit — student must be selected
+document.getElementById('candidate-form').addEventListener('submit', function(e) {
+  if (!hiddenField.value) {
+    e.preventDefault();
+    searchInput.style.borderColor = '#dc2626';
+    searchInput.insertAdjacentHTML('afterend',
+      '<div class="text-danger mt-1" style="font-size:0.78rem;" id="student-err">Please select a student from the search results.</div>'
+    );
+    setTimeout(() => {
+      const err = document.getElementById('student-err');
+      if (err) err.remove();
+      searchInput.style.borderColor = '';
+    }, 3000);
+  }
+});
+</script>
 {% endblock %}

@@ -1557,17 +1557,61 @@ function validateDeleteConfirm(input) {
 }
 
 function executeDelete() {
-  if (document.getElementById(
-    'modal-confirm-input').value.trim() !== 'DELETE') return;
+  if (document.getElementById('modal-confirm-input').value.trim() !== 'DELETE') return;
+
+  // Capture action BEFORE closeDeleteModal() nullifies pendingAction
+  const action = pendingAction;
   closeDeleteModal();
-  if (pendingAction === 'delete_all') {
-    const form = document.getElementById('bulk-action-form');
-    document.getElementById('hidden-action').value = 'delete_all';
-    document.getElementById('hidden-student-ids').innerHTML = '';
-    form.submit();
+
+  // Build a fresh form and POST directly — avoids any stale state
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '{% url "admin_students_bulk_action" %}';
+  form.style.display = 'none';
+
+  // CSRF token
+  const csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+  const csrfInput = document.createElement('input');
+  csrfInput.type = 'hidden';
+  csrfInput.name = 'csrfmiddlewaretoken';
+  csrfInput.value = csrf ? csrf.value : '';
+  form.appendChild(csrfInput);
+
+  // Action field
+  const actionInput = document.createElement('input');
+  actionInput.type = 'hidden';
+  actionInput.name = 'action';
+  actionInput.value = action;
+  form.appendChild(actionInput);
+
+  if (action === 'delete_all') {
+    // No student IDs needed — backend deletes all non-staff
+    const saInput = document.createElement('input');
+    saInput.type = 'hidden';
+    saInput.name = 'select_all_pages';
+    saInput.value = '0';
+    form.appendChild(saInput);
   } else {
-    submitBulkForm('delete');
+    // Add each selected student ID
+    const saInput = document.createElement('input');
+    saInput.type = 'hidden';
+    saInput.name = 'select_all_pages';
+    saInput.value = allPagesSelected ? '1' : '0';
+    form.appendChild(saInput);
+
+    if (!allPagesSelected) {
+      selectedIds.forEach(id => {
+        const idInput = document.createElement('input');
+        idInput.type = 'hidden';
+        idInput.name = 'student_ids';
+        idInput.value = id;
+        form.appendChild(idInput);
+      });
+    }
   }
+
+  document.body.appendChild(form);
+  form.submit();
 }
 
 // Close modals on backdrop or Escape

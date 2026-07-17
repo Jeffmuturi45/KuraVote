@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}KuraVote{% endblock %}</title>
+  <title>{% block title %}{{ system_name|default:"KuraVote" }}{% endblock %}</title>
 
   <!-- Preload critical fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,6 +22,31 @@
 
   <!-- KuraVote Custom CSS -->
   <link href="{% static 'css/kuravote.css' %}" rel="stylesheet">
+
+  <!-- Dynamic appearance from system settings -->
+  {% if system_settings %}
+  <style>
+    {% with fs=system_settings.admin_font_size sfs=system_settings.student_font_size bg=system_settings.background_style %}
+    :root {
+      {% if bg == 'light' %}--bg: #f8fafc;{% elif bg == 'white' %}--bg: #ffffff;{% else %}--bg: #f0fdf4;{% endif %}
+    }
+    /* Admin panel font size */
+    .admin-wrapper {
+      {% if fs == 'sm' %}font-size: 12px;
+      {% elif fs == 'lg' %}font-size: 16px;
+      {% elif fs == 'xl' %}font-size: 19px;
+      {% else %}font-size: 14px;{% endif %}
+    }
+    /* Student panel font size */
+    .student-shell, .student-content {
+      {% if sfs == 'sm' %}font-size: 12px;
+      {% elif sfs == 'lg' %}font-size: 16px;
+      {% elif sfs == 'xl' %}font-size: 19px;
+      {% else %}font-size: 14px;{% endif %}
+    }
+    {% endwith %}
+  </style>
+  {% endif %}
 
   {% block extra_css %}{% endblock %}
 </head>

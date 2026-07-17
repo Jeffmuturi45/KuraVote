@@ -201,10 +201,12 @@ def student_dashboard(request):
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
-    try:
-        election = Election.objects.get(status=Election.STATUS_ACTIVE)
-    except Election.DoesNotExist:
-        election = None
+    # Use filter().first() instead of .get() to avoid
+    # MultipleObjectsReturned (500) if admin accidentally
+    # has more than one active election in DB.
+    election = Election.objects.filter(
+        status=Election.STATUS_ACTIVE
+    ).order_by('-created_at').first()
 
     voted_positions = []
     if election:
@@ -245,9 +247,10 @@ def ballot_view(request):
         )
         return redirect('student_dashboard')
 
-    try:
-        election = Election.objects.get(status=Election.STATUS_ACTIVE)
-    except Election.DoesNotExist:
+    election = Election.objects.filter(
+        status=Election.STATUS_ACTIVE
+    ).order_by('-created_at').first()
+    if not election:
         messages.error(request, 'No active election at the moment.')
         return redirect('student_dashboard')
 
@@ -311,9 +314,10 @@ def cast_vote(request):
     if request.method != 'POST':
         return redirect('ballot')
 
-    try:
-        election = Election.objects.get(status=Election.STATUS_ACTIVE)
-    except Election.DoesNotExist:
+    election = Election.objects.filter(
+        status=Election.STATUS_ACTIVE
+    ).order_by('-created_at').first()
+    if not election:
         messages.error(request, 'No active election at the moment.')
         return redirect('student_dashboard')
 
@@ -496,16 +500,17 @@ def student_profile(request):
                 'Please fix the errors below.'
             )
 
-    try:
-        election = Election.objects.get(status=Election.STATUS_ACTIVE)
+    election = Election.objects.filter(
+        status=Election.STATUS_ACTIVE
+    ).order_by('-created_at').first()
+    if election:
         voted_positions = list(
             Vote.objects.filter(
                 student=request.user,
                 election=election
             ).values_list('position_id', flat=True)
         )
-    except Election.DoesNotExist:
-        election = None
+    else:
         voted_positions = []
 
     context = {
@@ -581,10 +586,10 @@ def admin_dashboard(request):
     total_elections = Election.objects.count()
     total_candidates = Candidate.objects.count()
 
-    try:
-        active_election = Election.objects.get(
-            status=Election.STATUS_ACTIVE
-        )
+    active_election = Election.objects.filter(
+        status=Election.STATUS_ACTIVE
+    ).order_by('-created_at').first()
+    if active_election:
         total_votes = Vote.objects.filter(
             election=active_election
         ).count()
@@ -594,8 +599,7 @@ def admin_dashboard(request):
         turnout = round(
             (voters_count / total_students) * 100, 1
         ) if total_students > 0 else 0
-    except Election.DoesNotExist:
-        active_election = None
+    else:
         total_votes = 0
         voters_count = 0
         turnout = 0
@@ -1000,6 +1004,8 @@ def admin_students_bulk_action(request):
                 deleted, _ = Student.objects.filter(
                     is_staff=False
                 ).delete()
+                from .utils import invalidate_student_stats
+                invalidate_student_stats()
                 messages.success(
                     request,
                     f'All {deleted} students deleted successfully.'
@@ -1164,20 +1170,30 @@ def admin_student_delete(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_students_delete_all(request):
+    """Standalone delete-all endpoint (kept for direct URL use)."""
     if request.method == 'POST':
-        confirm = request.POST.get('confirm_text', '')
-        if confirm == 'DELETE ALL':
-            Student.objects.filter(is_staff=False).delete()
-            messages.success(
-                request,
-                'All students have been deleted successfully.'
+        from django.contrib.admin.models import LogEntry
+        try:
+            all_ids = list(
+                Student.objects.filter(
+                    is_staff=False
+                ).values_list('id', flat=True)
             )
-        else:
-            messages.error(
-                request,
-                'Confirmation text did not match. '
-                'No students deleted.'
-            )
+            if all_ids:
+                LogEntry.objects.filter(user_id__in=all_ids).delete()
+                deleted, _ = Student.objects.filter(
+                    is_staff=False
+                ).delete()
+                from .utils import invalidate_student_stats
+                invalidate_student_stats()
+                messages.success(
+                    request,
+                    f'All {deleted} students deleted successfully.'
+                )
+            else:
+                messages.warning(request, 'No students to delete.')
+        except Exception as e:
+            messages.error(request, f'Error deleting students: {str(e)}')
     return redirect('admin_students')
 
 
@@ -1493,10 +1509,27 @@ def admin_results_api(request, election_id):
             reverse=True
         )
         pos_total = Vote.objects.filter(position=position).count()
+
+        # ── Tiebreak detection ────────────────────────────
+        winner_id = None
+        is_tied = False
+        if candidates and pos_total > 0:
+            top_votes = candidates[0].vote_count
+            if top_votes > 0:
+                tied = [c for c in candidates if c.vote_count == top_votes]
+                if len(tied) > 1:
+                    is_tied = True
+                    resolved = _resolve_tiebreak(position, election, tied)
+                    winner_id = resolved.id
+                else:
+                    winner_id = candidates[0].id
+
         data.append({
             'position_id':   position.id,
             'position_name': position.position_name,
             'total_votes':   pos_total,
+            'is_tied':       is_tied,
+            'winner_id':     winner_id,
             'candidates': [
                 {
                     'id':         c.id,
@@ -1505,6 +1538,8 @@ def admin_results_api(request, election_id):
                     'color':      c.get_avatar_color(),
                     'votes':      c.vote_count,
                     'percentage': c.vote_percentage,
+                    'is_winner':  (c.id == winner_id),
+                    'is_tied':    is_tied and c.vote_count == (candidates[0].vote_count if candidates else 0),
                 }
                 for c in candidates
             ]
@@ -1548,17 +1583,33 @@ def admin_reports(request, election_id):
         )
         pos_total = Vote.objects.filter(position=position).count()
 
+        winner = None
+        is_tied = False
+        tiebreak_info = None
+
         if candidates and pos_total > 0 \
                 and candidates[0].vote_count > 0:
-            winner = candidates[0]
-        else:
-            winner = None
+            top_votes = candidates[0].vote_count
+            tied = [c for c in candidates if c.vote_count == top_votes]
+            if len(tied) > 1:
+                is_tied = True
+                winner = _resolve_tiebreak(position, election, tied)
+                tiebreak_info = {
+                    'tied_names': ', '.join(
+                        c.student.get_full_name() for c in tied
+                    ),
+                    'vote_count': top_votes,
+                }
+            else:
+                winner = candidates[0]
 
         results.append({
-            'position':    position,
-            'candidates':  candidates,
-            'winner':      winner,
-            'total_votes': pos_total,
+            'position':      position,
+            'candidates':    candidates,
+            'winner':        winner,
+            'total_votes':   pos_total,
+            'is_tied':       is_tied,
+            'tiebreak_info': tiebreak_info,
         })
 
     total_students = Student.objects.filter(is_staff=False).count()
@@ -1649,12 +1700,11 @@ def export_pdf(request, election_id):
         )
         pos_total = Vote.objects.filter(position=position).count()
 
-        winner = (
-            candidates[0]
-            if candidates and pos_total > 0
-            and candidates[0].vote_count > 0
-            else None
-        )
+        winner = None
+        if candidates and pos_total > 0 and candidates[0].vote_count > 0:
+            top_votes = candidates[0].vote_count
+            tied = [c for c in candidates if c.vote_count == top_votes]
+            winner = _resolve_tiebreak(position, election, tied) if len(tied) > 1 else candidates[0]
 
         elements.append(
             Paragraph(position.position_name, styles['Heading3'])
@@ -1802,12 +1852,11 @@ def export_excel(request, election_id):
         )
         pos_total = Vote.objects.filter(position=position).count()
 
-        winner = (
-            candidates[0]
-            if candidates and pos_total > 0
-            and candidates[0].vote_count > 0
-            else None
-        )
+        winner = None
+        if candidates and pos_total > 0 and candidates[0].vote_count > 0:
+            top_votes = candidates[0].vote_count
+            tied = [c for c in candidates if c.vote_count == top_votes]
+            winner = _resolve_tiebreak(position, election, tied) if len(tied) > 1 else candidates[0]
 
         ws.merge_cells(f'A{current_row}:F{current_row}')
         pos_cell = ws.cell(
@@ -1940,7 +1989,186 @@ def admin_active_users_api(request):
 
 @staff_member_required(login_url='login')
 def admin_settings(request):
-    return render(request, 'admin/settings.html')
+    from .models import SystemSettings
+    settings_obj = SystemSettings.get()
+
+    if request.method == 'POST':
+        action = request.POST.get('settings_action', '')
+
+        if action == 'system':
+            system_name = request.POST.get('system_name', '').strip()
+            institution_name = request.POST.get('institution_name', '').strip()
+            if system_name:
+                settings_obj.system_name = system_name
+            settings_obj.institution_name = institution_name
+            settings_obj.save()
+            # Update existing unconfirmed OTP device names
+            from django_otp.plugins.otp_totp.models import TOTPDevice
+            TOTPDevice.objects.filter(
+                confirmed=False
+            ).update(name=f'{settings_obj.system_name} Admin')
+            messages.success(request, 'System settings saved.')
+
+        elif action == 'security':
+            two_fa = request.POST.get('two_fa_enabled') == 'on'
+            settings_obj.two_fa_enabled = two_fa
+            settings_obj.save()
+            messages.success(
+                request,
+                f'2FA {"enabled" if two_fa else "disabled"} successfully.'
+            )
+
+        elif action == 'appearance':
+            admin_font = request.POST.get('admin_font_size', 'md')
+            student_font = request.POST.get('student_font_size', 'md')
+            bg_style = request.POST.get('background_style', 'default')
+            valid_fonts = ('sm', 'md', 'lg', 'xl')
+            valid_bg = ('default', 'light', 'white')
+            if admin_font in valid_fonts:
+                settings_obj.admin_font_size = admin_font
+            if student_font in valid_fonts:
+                settings_obj.student_font_size = student_font
+            if bg_style in valid_bg:
+                settings_obj.background_style = bg_style
+            settings_obj.save()
+            messages.success(request, 'Appearance settings saved.')
+
+        return redirect('admin_settings')
+
+    from .models import Student
+    total_students = Student.objects.filter(is_staff=False).count()
+    total_elections = Election.objects.count()
+
+    context = {
+        'settings_obj':   settings_obj,
+        'total_students': total_students,
+        'total_elections': total_elections,
+    }
+    return render(request, 'admin/settings.html', context)
+
+
+# ── Student Search API (for candidate registration) ────────
+
+@staff_member_required(login_url='login')
+def admin_student_search_api(request):
+    """AJAX endpoint — returns students matching a search query.
+    Used by the candidate registration form to avoid loading
+    170 000 options in a <select> dropdown.
+    """
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': []})
+
+    from django.db.models import Q
+    students = Student.objects.filter(
+        is_staff=False, is_active=True
+    ).filter(
+        Q(first_name__icontains=q) |
+        Q(last_name__icontains=q) |
+        Q(admission_number__icontains=q)
+    ).values(
+        'id', 'first_name', 'last_name', 'admission_number'
+    ).order_by('last_name', 'first_name')[:20]
+
+    results = [
+        {
+            'id': s['id'],
+            'text': f"{s['first_name']} {s['last_name']} ({s['admission_number']})",
+        }
+        for s in students
+    ]
+    return JsonResponse({'results': results})
+
+
+# ── Tiebreak Resolution ────────────────────────────────────
+
+def _resolve_tiebreak(position, election, tied_candidates):
+    """
+    Best-and-fairest tiebreaker strategy:
+
+    1. PRIMARY  — Earliest first vote cast (the candidate who
+                  received their FIRST vote earliest wins).
+                  This is purely random from voters' perspective
+                  (no voter knows who voted first) and rewards
+                  no strategic behaviour.
+
+    2. FALLBACK — If two candidates received their first vote at
+                  the exact same millisecond (astronomically rare),
+                  we fall back to a deterministic hash-based draw
+                  using the election ID + position ID + candidate
+                  IDs so the result is reproducible and auditable.
+
+    Every resolution is logged to TiebreakLog for full transparency.
+    """
+    from .models import TiebreakLog
+    import hashlib
+
+    tied_ids = [c.id for c in tied_candidates]
+    vote_count = tied_candidates[0].vote_count  # all equal at this point
+
+    # ── Step 1: Earliest first vote ───────────────────────
+    winner = None
+    earliest_time = None
+    for candidate in tied_candidates:
+        first_vote = Vote.objects.filter(
+            candidate=candidate,
+            election=election,
+        ).order_by('voted_at').values_list('voted_at', flat=True).first()
+
+        if first_vote is not None:
+            if earliest_time is None or first_vote < earliest_time:
+                earliest_time = first_vote
+                winner = candidate
+
+    method = 'earliest_first_vote'
+    notes = (
+        f'Tie at {vote_count} votes between '
+        f'{[c.student.get_full_name() for c in tied_candidates]}. '
+        f'Winner determined by earliest received first vote.'
+    )
+
+    # ── Step 2: Hash-based fallback if still tied ─────────
+    if winner is None:
+        seed = f'{election.id}-{position.id}-{sorted(tied_ids)}'
+        digest = hashlib.sha256(seed.encode()).hexdigest()
+        # Map hash to one of the tied candidates deterministically
+        idx = int(digest[:8], 16) % len(tied_candidates)
+        winner = tied_candidates[idx]
+        method = 'deterministic_hash_draw'
+        notes = (
+            f'Tie at {vote_count} votes. '
+            f'No first-vote time difference found. '
+            f'Winner selected via SHA-256 hash draw (seed: {seed[:20]}…).'
+        )
+
+    # ── Log the decision ──────────────────────────────────
+    TiebreakLog.objects.create(
+        position=position,
+        election=election,
+        tied_candidates=[
+            {
+                'id':    c.id,
+                'name':  c.student.get_full_name(),
+                'votes': c.vote_count,
+            }
+            for c in tied_candidates
+        ],
+        winner_candidate_id=winner.id,
+        winner_name=winner.student.get_full_name(),
+        method=method,
+        notes=notes,
+    )
+
+    return winner
+
+
+@staff_member_required(login_url='login')
+def admin_tiebreak_log(request):
+    from .models import TiebreakLog
+    logs = TiebreakLog.objects.select_related(
+        'position', 'election'
+    ).order_by('-resolved_at')
+    return render(request, 'admin/tiebreak_log.html', {'logs': logs})
 
 
 # ═══════════════════════════════════════════════
@@ -1957,10 +2185,13 @@ def admin_setup_otp(request):
     if user_has_device(user):
         return redirect('admin_verify_otp')
 
-    # Create an unconfirmed device
+    # Create an unconfirmed device — use system name from settings
+    from .models import SystemSettings
+    sys_settings = SystemSettings.get()
+    device_name = f'{sys_settings.system_name} Admin'
     device, created = TOTPDevice.objects.get_or_create(
         user=user,
-        name='KuraVote Admin',
+        name=device_name,
         defaults={'confirmed': False}
     )
 

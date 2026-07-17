@@ -1,0 +1,85 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}{{ system_name }} — Tiebreak Log{% endblock %}
+{% block page_title %}Tiebreak Log{% endblock %}
+{% block page_title_2 %}Tiebreak Log{% endblock %}
+
+{% block admin_content %}
+<div class="action-bar mb-4">
+  <div>
+    <div class="section-title mb-1">Tiebreak Decisions</div>
+    <div class="section-sub">Every tie resolution is logged here for full transparency and auditability</div>
+  </div>
+  <a href="{% url 'admin_settings' %}" class="btn-kura-outline">
+    <i class="fa fa-arrow-left me-1"></i>Back to Settings
+  </a>
+</div>
+
+{% if logs %}
+<div class="kura-card" style="padding:0;overflow:hidden;">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="background:linear-gradient(135deg,#14532d,#166534);">
+        <th style="padding:14px 16px;color:#fff;font-size:12px;font-weight:600;text-align:left;">Date</th>
+        <th style="padding:14px 16px;color:#fff;font-size:12px;font-weight:600;text-align:left;">Election</th>
+        <th style="padding:14px 16px;color:#fff;font-size:12px;font-weight:600;text-align:left;">Position</th>
+        <th style="padding:14px 16px;color:#fff;font-size:12px;font-weight:600;text-align:left;">Tied Candidates</th>
+        <th style="padding:14px 16px;color:#fff;font-size:12px;font-weight:600;text-align:left;">Winner</th>
+        <th style="padding:14px 16px;color:#fff;font-size:12px;font-weight:600;text-align:left;">Method</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr style="border-bottom:1px solid #f0fdf4;{% cycle '' 'background:#f0fdf4;' %}">
+        <td style="padding:12px 16px;font-size:12px;color:#64748b;white-space:nowrap;">
+          {{ log.resolved_at|date:"d M Y, H:i" }}
+        </td>
+        <td style="padding:12px 16px;font-size:13px;font-weight:500;color:#1e293b;">
+          {{ log.election.election_name }}
+        </td>
+        <td style="padding:12px 16px;font-size:13px;color:#166534;font-weight:500;">
+          {{ log.position.position_name }}
+        </td>
+        <td style="padding:12px 16px;font-size:12px;color:#64748b;">
+          {% for c in log.tied_candidates %}
+            <span style="display:inline-block;background:#fef9c3;color:#92400e;
+                         border-radius:6px;padding:2px 8px;margin:1px;font-size:11px;">
+              {{ c.name }} ({{ c.votes }} votes)
+            </span>
+          {% endfor %}
+        </td>
+        <td style="padding:12px 16px;">
+          <span style="background:#dcfce7;color:#166534;border-radius:8px;
+                       padding:4px 12px;font-size:12px;font-weight:600;">
+            <i class="fa fa-trophy me-1"></i>{{ log.winner_name }}
+          </span>
+        </td>
+        <td style="padding:12px 16px;">
+          {% if log.method == 'earliest_first_vote' %}
+            <span style="background:#dbeafe;color:#1e40af;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:500;">
+              <i class="fa fa-clock me-1"></i>Earliest Vote
+            </span>
+          {% else %}
+            <span style="background:#f3e8ff;color:#7c3aed;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:500;">
+              <i class="fa fa-dice me-1"></i>Hash Draw
+            </span>
+          {% endif %}
+          <div style="font-size:10px;color:#94a3b8;margin-top:4px;max-width:200px;">{{ log.notes }}</div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div style="text-align:center;padding:60px 20px;background:#fff;border-radius:16px;border:1px solid #d1fae5;">
+  <i class="fa fa-balance-scale" style="font-size:3rem;color:#bbf7d0;margin-bottom:16px;display:block;"></i>
+  <div style="font-family:'Sora',sans-serif;font-size:1.1rem;color:#166534;font-weight:600;margin-bottom:8px;">
+    No Tiebreaks Recorded
+  </div>
+  <div style="color:#94a3b8;font-size:13px;">
+    Tie-resolution decisions will appear here automatically if a tie occurs during any election.
+  </div>
+</div>
+{% endif %}
+{% endblock %}

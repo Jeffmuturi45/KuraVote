@@ -246,4 +246,14 @@ urlpatterns = [
         views.admin_settings,
         name='admin_settings'
     ),
+    path(
+        'admin-panel/students/search/',
+        views.admin_student_search_api,
+        name='admin_student_search_api'
+    ),
+    path(
+        'admin-panel/tiebreak-log/',
+        views.admin_tiebreak_log,
+        name='admin_tiebreak_log'
+    ),
 ]

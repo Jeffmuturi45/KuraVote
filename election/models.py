@@ -52,6 +52,9 @@ class Student(AbstractBaseUser, PermissionsMixin):
         indexes = [
             models.Index(fields=['admission_number']),
             models.Index(fields=['email']),
+            models.Index(fields=['first_name']),
+            models.Index(fields=['last_name']),
+            models.Index(fields=['first_name', 'last_name']),
         ]
 
     def get_full_name(self):
@@ -299,6 +302,54 @@ class Vote(models.Model):
             f"{self.candidate.student.get_full_name()} "
             f"({self.position.position_name})"
         )
+
+
+class SystemSettings(models.Model):
+    """Single-row settings table for the institution."""
+    system_name = models.CharField(max_length=100, default='KuraVote')
+    institution_name = models.CharField(max_length=200, default='')
+    two_fa_enabled = models.BooleanField(default=True)
+    # Font size preference: 'sm', 'md', 'lg', 'xl'
+    admin_font_size = models.CharField(max_length=5, default='md')
+    student_font_size = models.CharField(max_length=5, default='md')
+    # Background style: 'default', 'light', 'white'
+    background_style = models.CharField(max_length=10, default='default')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'system_settings'
+        verbose_name = 'System Settings'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return f'Settings — {self.system_name}'
+
+
+class TiebreakLog(models.Model):
+    """Auditable record of every tiebreak decision made by the system."""
+    position = models.ForeignKey(
+        'Position', on_delete=models.CASCADE, related_name='tiebreak_logs'
+    )
+    election = models.ForeignKey(
+        'Election', on_delete=models.CASCADE, related_name='tiebreak_logs'
+    )
+    tied_candidates = models.JSONField()        # list of {id, name, votes}
+    winner_candidate_id = models.IntegerField()
+    winner_name = models.CharField(max_length=200)
+    method = models.CharField(max_length=50, default='earliest_vote')
+    resolved_at = models.DateTimeField(default=timezone.now)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'tiebreak_logs'
+        ordering = ['-resolved_at']
+
+    def __str__(self):
+        return f'Tiebreak: {self.position} → {self.winner_name}'
 
 
 class Notification(models.Model):

@@ -4,14 +4,14 @@ import time
 
 
 # ── Cache keys ─────────────────────────────────────────────
-CACHE_STUDENTS_STATS    = 'students_stats'
-CACHE_ACTIVE_ELECTION   = 'active_election'
-CACHE_POSITIONS_PREFIX  = 'positions_election_'
-CACHE_RESULTS_PREFIX    = 'results_election_'
+CACHE_STUDENTS_STATS = 'students_stats'
+CACHE_ACTIVE_ELECTION = 'active_election'
+CACHE_POSITIONS_PREFIX = 'positions_election_'
+CACHE_RESULTS_PREFIX = 'results_election_'
 
-CACHE_SHORT  = 30    # 30 seconds — live data
+CACHE_SHORT = 30    # 30 seconds — live data
 CACHE_MEDIUM = 300   # 5 minutes  — semi-static
-CACHE_LONG   = 3600  # 1 hour     — rarely changes
+CACHE_LONG = 3600  # 1 hour     — rarely changes
 
 
 def get_student_stats():
@@ -26,18 +26,18 @@ def get_student_stats():
     from .models import Student
     stats = {
         'total':            Student.objects.filter(
-                                is_staff=False
-                            ).count(),
+            is_staff=False
+        ).count(),
         'active':           Student.objects.filter(
-                                is_staff=False, is_active=True
-                            ).count(),
+            is_staff=False, is_active=True
+        ).count(),
         'inactive':         Student.objects.filter(
-                                is_staff=False, is_active=False
-                            ).count(),
+            is_staff=False, is_active=False
+        ).count(),
         'default_password': Student.objects.filter(
-                                is_staff=False,
-                                password_changed=False
-                            ).count(),
+            is_staff=False,
+            password_changed=False
+        ).count(),
     }
     cache.set(CACHE_STUDENTS_STATS, stats, timeout=CACHE_MEDIUM)
     return stats
@@ -78,7 +78,7 @@ def invalidate_active_election():
 
 def get_positions_for_election(election_id):
     """Cache positions per election — 5 minutes."""
-    key    = f'{CACHE_POSITIONS_PREFIX}{election_id}'
+    key = f'{CACHE_POSITIONS_PREFIX}{election_id}'
     cached = cache.get(key)
     if cached:
         return cached
@@ -98,10 +98,10 @@ def invalidate_election_positions(election_id):
 
 
 def get_active_users():
-    active_ids  = cache.get('active_user_ids', set())
+    active_ids = cache.get('active_user_ids', set())
     active_list = []
-    now         = time.time()
-    stale       = set()
+    now = time.time()
+    stale = set()
 
     for user_id in list(active_ids):
         data = cache.get(f'active_user_{user_id}')
@@ -118,52 +118,56 @@ def get_active_users():
 
 
 def active_election(request):
-    from .models import Election
+    from .models import Election, SystemSettings
     try:
         election = Election.objects.get(
             status=Election.STATUS_ACTIVE
         )
     except Election.DoesNotExist:
         election = None
+    sys_settings = SystemSettings.get()
     return {
         'active_election':    election,
         'active_users_count': len(get_active_users()),
+        'system_settings':    sys_settings,
+        'system_name':        sys_settings.system_name,
     }
 
 
 def create_notification(student, title, message,
-                         notif_type='info'):
+                        notif_type='info'):
     from .models import Notification
     Notification.objects.create(
-        student    = student,
-        title      = title,
-        message    = message,
-        notif_type = notif_type,
+        student=student,
+        title=title,
+        message=message,
+        notif_type=notif_type,
     )
+
 
 def create_admin_notification(title, message, notif_type='info'):
     from .models import Notification
     Notification.objects.create(
-        student                = None,
-        is_admin_notification  = True,
-        title                  = title,
-        message                = message,
-        notif_type              = notif_type,
+        student=None,
+        is_admin_notification=True,
+        title=title,
+        message=message,
+        notif_type=notif_type,
     )
 
+
 def create_bulk_notifications(students, title,
-                               message, notif_type='info'):
+                              message, notif_type='info'):
     from .models import Notification
     Notification.objects.bulk_create([
         Notification(
-            student    = s,
-            title      = title,
-            message    = message,
-            notif_type = notif_type,
+            student=s,
+            title=title,
+            message=message,
+            notif_type=notif_type,
         )
         for s in students
     ], batch_size=500)
-
 
 
 def create_bulk_notifications(students, title,

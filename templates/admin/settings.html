@@ -1,186 +1,364 @@
 {% extends 'admin/base_admin.html' %}
 
-{% block title %}KuraVote — Settings{% endblock %}
+{% block title %}{{ system_name }} — Settings{% endblock %}
 {% block nav_settings %}active{% endblock %}
 {% block page_title %}Settings{% endblock %}
 {% block page_title_2 %}Settings{% endblock %}
 
 {% block admin_content %}
-
 <div class="row g-4">
 
-  <!-- System Info -->
-  <div class="col-lg-6">
+  <!-- ── System Overview ──────────────────────────────── -->
+  <div class="col-12">
     <div class="form-card">
-      <div class="section-title mb-1">System Information</div>
-      <div class="section-sub mb-4">
-        Current KuraVote system details
+      <div class="section-title mb-1">System Overview</div>
+      <div class="section-sub mb-4">Live system statistics</div>
+      <div class="row g-3">
+        <div class="col-md-3 col-6">
+          <div class="stat-card">
+            <div class="stat-label"><i class="fa fa-id-badge" style="color:#16a34a;"></i> System Name</div>
+            <div class="stat-value" style="font-size:1rem;">{{ settings_obj.system_name }}</div>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="stat-card">
+            <div class="stat-label"><i class="fa fa-users" style="color:#16a34a;"></i> Total Students</div>
+            <div class="stat-value">{{ total_students }}</div>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="stat-card">
+            <div class="stat-label"><i class="fa fa-vote-yea" style="color:#16a34a;"></i> Elections</div>
+            <div class="stat-value">{{ total_elections }}</div>
+          </div>
+        </div>
+        <div class="col-md-3 col-6">
+          <div class="stat-card">
+            <div class="stat-label"><i class="fa fa-bolt" style="color:#16a34a;"></i> Active Election</div>
+            <div class="stat-value" style="font-size:0.85rem;">
+              {% if active_election %}
+                <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600;">
+                  {{ active_election.election_name }}
+                </span>
+              {% else %}
+                <span style="color:#94a3b8;font-size:13px;">None</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
       </div>
-
-      <table style="width:100%; font-size:13px;">
-        <tr style="border-bottom:1px solid #f0fdf4;">
-          <td style="padding:10px 0; color:#94a3b8; width:40%;">
-            System Name
-          </td>
-          <td style="padding:10px 0; font-weight:600; color:#166534;">
-            KuraVote
-          </td>
-        </tr>
-        <tr style="border-bottom:1px solid #f0fdf4;">
-          <td style="padding:10px 0; color:#94a3b8;">Version</td>
-          <td style="padding:10px 0; font-weight:600;">1.0.0</td>
-        </tr>
-        <tr style="border-bottom:1px solid #f0fdf4;">
-          <td style="padding:10px 0; color:#94a3b8;">
-            Total Students
-          </td>
-          <td style="padding:10px 0; font-weight:600;">
-            {% with total=0 %}
-              {% load static %}
-              {% comment %}Use context processor{% endcomment %}
-            {% endwith %}
-          </td>
-        </tr>
-        <tr style="border-bottom:1px solid #f0fdf4;">
-          <td style="padding:10px 0; color:#94a3b8;">
-            Active Election
-          </td>
-          <td style="padding:10px 0;">
-            {% if active_election %}
-              <span style="background:#dcfce7; color:#166534;
-                           padding:3px 10px; border-radius:10px;
-                           font-size:12px; font-weight:500;">
-                {{ active_election.election_name }}
-              </span>
-            {% else %}
-              <span style="color:#94a3b8; font-size:12px;">
-                None
-              </span>
-            {% endif %}
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:10px 0; color:#94a3b8;">
-            Server Time
-          </td>
-          <td style="padding:10px 0; font-weight:600;"
-              id="settings-clock">
-            --:--:--
-          </td>
-        </tr>
-      </table>
     </div>
   </div>
 
-  <!-- Admin Account -->
+  <!-- ── System Identity ──────────────────────────────── -->
+  <div class="col-lg-6">
+    <div class="form-card">
+      <div class="section-title mb-1">System Identity</div>
+      <div class="section-sub mb-4">Name shown in login pages and OTP authenticator apps</div>
+      <form method="POST">
+        {% csrf_token %}
+        <input type="hidden" name="settings_action" value="system">
+        <div class="mb-3">
+          <label class="form-label" style="font-size:0.85rem;font-weight:500;">System Name</label>
+          <input type="text" name="system_name" class="form-control"
+                 value="{{ settings_obj.system_name }}" maxlength="100" required>
+          <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px;">
+            <i class="fa fa-info-circle me-1"></i>
+            Appears in 2FA authenticator app, browser tabs, and navbar.
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" style="font-size:0.85rem;font-weight:500;">Institution Name</label>
+          <input type="text" name="institution_name" class="form-control"
+                 value="{{ settings_obj.institution_name }}" maxlength="200"
+                 placeholder="e.g. Nairobi Technical Institute">
+        </div>
+        <button type="submit" class="btn-kura">
+          <i class="fa fa-save me-2"></i>Save Identity
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Security / 2FA ───────────────────────────────── -->
+  <div class="col-lg-6">
+    <div class="form-card">
+      <div class="section-title mb-1">Security — Two-Factor Authentication</div>
+      <div class="section-sub mb-4">Control admin 2FA requirement system-wide</div>
+      <form method="POST">
+        {% csrf_token %}
+        <input type="hidden" name="settings_action" value="security">
+        <div style="border-radius:12px;padding:16px;margin-bottom:20px;
+                    display:flex;align-items:center;justify-content:space-between;gap:12px;
+                    {% if settings_obj.two_fa_enabled %}background:#dcfce7;border:1px solid #bbf7d0;
+                    {% else %}background:#fef2f2;border:1px solid #fecaca;{% endif %}">
+          <div>
+            <div style="font-weight:600;font-size:14px;
+                        {% if settings_obj.two_fa_enabled %}color:#166534;{% else %}color:#dc2626;{% endif %}">
+              2FA is currently <strong>{% if settings_obj.two_fa_enabled %}ENABLED{% else %}DISABLED{% endif %}</strong>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-top:3px;">
+              {% if settings_obj.two_fa_enabled %}
+                Admins must verify via Google Authenticator / Authy on every login.
+              {% else %}
+                Admins can log in without a second factor. Enable for production use.
+              {% endif %}
+            </div>
+          </div>
+          <label style="position:relative;display:inline-block;width:52px;height:28px;flex-shrink:0;cursor:pointer;">
+            <input type="checkbox" name="two_fa_enabled"
+                   {% if settings_obj.two_fa_enabled %}checked{% endif %}
+                   onchange="this.form.submit()"
+                   style="opacity:0;width:0;height:0;">
+            <span id="fa-toggle-track"
+                  style="position:absolute;inset:0;border-radius:28px;transition:0.3s;
+                         background:{% if settings_obj.two_fa_enabled %}#16a34a{% else %}#d1d5db{% endif %};">
+              <span style="position:absolute;height:22px;width:22px;bottom:3px;border-radius:50%;
+                           background:#fff;transition:0.3s;display:block;
+                           left:{% if settings_obj.two_fa_enabled %}27px{% else %}3px{% endif %};"></span>
+            </span>
+          </label>
+        </div>
+        <div style="font-size:12px;color:#94a3b8;background:#f8fafc;border-radius:8px;padding:10px 14px;">
+          <i class="fa fa-shield-alt me-1" style="color:#166534;"></i>
+          <strong>Recommendation:</strong> Keep 2FA enabled in production. Only disable for testing.
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Appearance ───────────────────────────────────── -->
+  <div class="col-12">
+    <div class="form-card">
+      <div class="section-title mb-1">Appearance</div>
+      <div class="section-sub mb-4">Font size for admin and student dashboards, plus background style</div>
+      <form method="POST" id="appearance-form">
+        {% csrf_token %}
+        <input type="hidden" name="settings_action" value="appearance">
+        <div class="row g-4">
+
+          <!-- Admin font -->
+          <div class="col-md-4">
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">
+              <i class="fa fa-user-shield me-1" style="color:#166534;"></i>Admin Font Size
+            </label>
+            <div class="d-flex gap-2 flex-wrap" id="admin-font-group">
+              <label class="font-pill">
+                <input type="radio" name="admin_font_size" value="sm" {% if settings_obj.admin_font_size == 'sm' %}checked{% endif %}>
+                <span>Small</span>
+              </label>
+              <label class="font-pill">
+                <input type="radio" name="admin_font_size" value="md" {% if settings_obj.admin_font_size == 'md' or not settings_obj.admin_font_size %}checked{% endif %}>
+                <span>Medium</span>
+              </label>
+              <label class="font-pill">
+                <input type="radio" name="admin_font_size" value="lg" {% if settings_obj.admin_font_size == 'lg' %}checked{% endif %}>
+                <span>Large</span>
+              </label>
+              <label class="font-pill">
+                <input type="radio" name="admin_font_size" value="xl" {% if settings_obj.admin_font_size == 'xl' %}checked{% endif %}>
+                <span>X-Large</span>
+              </label>
+            </div>
+            <div style="font-size:0.75rem;color:#94a3b8;margin-top:8px;">
+              Preview: <span id="admin-font-preview">The quick brown fox</span>
+            </div>
+          </div>
+
+          <!-- Student font -->
+          <div class="col-md-4">
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">
+              <i class="fa fa-user-graduate me-1" style="color:#166534;"></i>Student Font Size
+            </label>
+            <div class="d-flex gap-2 flex-wrap" id="student-font-group">
+              <label class="font-pill">
+                <input type="radio" name="student_font_size" value="sm" {% if settings_obj.student_font_size == 'sm' %}checked{% endif %}>
+                <span>Small</span>
+              </label>
+              <label class="font-pill">
+                <input type="radio" name="student_font_size" value="md" {% if settings_obj.student_font_size == 'md' or not settings_obj.student_font_size %}checked{% endif %}>
+                <span>Medium</span>
+              </label>
+              <label class="font-pill">
+                <input type="radio" name="student_font_size" value="lg" {% if settings_obj.student_font_size == 'lg' %}checked{% endif %}>
+                <span>Large</span>
+              </label>
+              <label class="font-pill">
+                <input type="radio" name="student_font_size" value="xl" {% if settings_obj.student_font_size == 'xl' %}checked{% endif %}>
+                <span>X-Large</span>
+              </label>
+            </div>
+            <div style="font-size:0.75rem;color:#94a3b8;margin-top:8px;">
+              Preview: <span id="student-font-preview">The quick brown fox</span>
+            </div>
+          </div>
+
+          <!-- Background -->
+          <div class="col-md-4">
+            <label class="form-label" style="font-size:0.85rem;font-weight:600;">
+              <i class="fa fa-palette me-1" style="color:#166534;"></i>Background Style
+            </label>
+            <div class="d-flex gap-2 flex-wrap">
+              <label class="font-pill">
+                <input type="radio" name="background_style" value="default" {% if settings_obj.background_style == 'default' or not settings_obj.background_style %}checked{% endif %}>
+                <span style="display:flex;align-items:center;gap:5px;">
+                  <span style="width:10px;height:10px;border-radius:50%;background:#f0fdf4;border:1px solid #ccc;display:inline-block;"></span>Green Tint
+                </span>
+              </label>
+              <label class="font-pill">
+                <input type="radio" name="background_style" value="light" {% if settings_obj.background_style == 'light' %}checked{% endif %}>
+                <span style="display:flex;align-items:center;gap:5px;">
+                  <span style="width:10px;height:10px;border-radius:50%;background:#f8fafc;border:1px solid #ccc;display:inline-block;"></span>Soft Grey
+                </span>
+              </label>
+              <label class="font-pill">
+                <input type="radio" name="background_style" value="white" {% if settings_obj.background_style == 'white' %}checked{% endif %}>
+                <span style="display:flex;align-items:center;gap:5px;">
+                  <span style="width:10px;height:10px;border-radius:50%;background:#ffffff;border:1px solid #ccc;display:inline-block;"></span>Pure White
+                </span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+        <div class="mt-4">
+          <button type="submit" class="btn-kura">
+            <i class="fa fa-paint-brush me-2"></i>Save Appearance
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Admin Account ────────────────────────────────── -->
   <div class="col-lg-6">
     <div class="form-card">
       <div class="section-title mb-1">Admin Account</div>
-      <div class="section-sub mb-4">
-        Logged in as administrator
-      </div>
-
+      <div class="section-sub mb-4">Logged in as administrator</div>
       <div class="d-flex align-items-center gap-3 mb-4"
-           style="background:#f0fdf4; border-radius:12px;
-                  padding:16px; border:1px solid #bbf7d0;">
-        <div style="width:52px; height:52px; border-radius:50%;
-                    background:#16a34a; display:flex;
-                    align-items:center; justify-content:center;
-                    font-size:1.2rem; font-weight:700;
-                    color:#fff; font-family:'Sora',sans-serif;
-                    flex-shrink:0;">
+           style="background:#f0fdf4;border-radius:12px;padding:16px;border:1px solid #bbf7d0;">
+        <div style="width:52px;height:52px;border-radius:50%;background:#16a34a;
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:1.2rem;font-weight:700;color:#fff;font-family:'Sora',sans-serif;flex-shrink:0;">
           {{ request.user.first_name|slice:":1"|upper }}{{ request.user.last_name|slice:":1"|upper }}
         </div>
         <div>
-          <div style="font-weight:700; font-size:14px; color:#166534;">
-            {{ request.user.get_full_name }}
-          </div>
-          <div style="font-size:12px; color:#64748b;">
-            Administrator
-          </div>
-          <div style="font-size:11px; color:#94a3b8; margin-top:2px;">
+          <div style="font-weight:700;font-size:14px;color:#166534;">{{ request.user.get_full_name }}</div>
+          <div style="font-size:12px;color:#64748b;">Administrator</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
             Last login: {{ request.user.last_login|date:"d M Y, H:i" }}
           </div>
         </div>
       </div>
-
-      <div class="d-flex gap-2">
-        <a href="/admin/password_change/"
-           class="btn-kura">
-          <i class="fa fa-key"></i>
-          Change Password
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="/admin/password_change/" class="btn-kura">
+          <i class="fa fa-key me-1"></i>Change Password
         </a>
-        <a href="{% url 'logout' %}"
-           class="btn-kura-outline"
-           onclick="return confirm('Log out of KuraVote?')">
-          <i class="fa fa-sign-out-alt"></i>
-          Logout
+        <a href="{% url 'admin_setup_otp' %}" class="btn-kura-outline">
+          <i class="fa fa-qrcode me-1"></i>Reset 2FA Device
         </a>
+        <button onclick="location.href='?retour=1'" class="btn-kura-outline">
+          <i class="fa fa-route me-1"></i>Replay Tour
+        </button>
       </div>
     </div>
   </div>
 
-  <button onclick="location.href='?retour=1'"
-        class="btn-kura-outline"
-        style="margin-top:10px;">
-  <i class="fa fa-route me-1"></i>
-  Replay Welcome Tour
-</button>
-
-  <!-- Django Admin Link -->
-  <div class="col-12">
-    <div class="form-card"
-         style="background:linear-gradient(135deg,
-                #14532d 0%, #166534 100%);
-                border-color:transparent;">
-      <div class="d-flex align-items-center
-                  justify-content-between flex-wrap gap-3">
-        <div>
-          <div style="font-family:'Sora',sans-serif; font-weight:700;
-                      font-size:1rem; color:#fff; margin-bottom:4px;">
-            Django Admin Panel
+  <!-- ── Audit & Tiebreak ──────────────────────────────── -->
+  <div class="col-lg-6">
+    <div class="form-card">
+      <div class="section-title mb-1">Audit & Records</div>
+      <div class="section-sub mb-4">View tiebreak decisions and security audit logs</div>
+      <div class="d-flex flex-column gap-3">
+        <a href="{% url 'admin_tiebreak_log' %}"
+           style="display:flex;align-items:center;gap:12px;background:#f0fdf4;
+                  border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;
+                  text-decoration:none;color:#166534;transition:background 0.15s;"
+           onmouseover="this.style.background='#dcfce7'"
+           onmouseout="this.style.background='#f0fdf4'">
+          <i class="fa fa-balance-scale fa-lg"></i>
+          <div>
+            <div style="font-weight:600;font-size:13px;">Tiebreak Log</div>
+            <div style="font-size:11px;color:#64748b;">Full audit trail of all tie-resolution decisions</div>
           </div>
-          <div style="font-size:12px; color:rgba(255,255,255,0.6);">
-            Access the full Django admin interface for advanced
-            database management, user permissions, and system logs.
+        </a>
+        <a href="{% url 'admin_audit_log' %}"
+           style="display:flex;align-items:center;gap:12px;background:#f0fdf4;
+                  border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;
+                  text-decoration:none;color:#166534;transition:background 0.15s;"
+           onmouseover="this.style.background='#dcfce7'"
+           onmouseout="this.style.background='#f0fdf4'">
+          <i class="fa fa-shield-alt fa-lg"></i>
+          <div>
+            <div style="font-weight:600;font-size:13px;">Security Audit Log</div>
+            <div style="font-size:11px;color:#64748b;">All admin actions are recorded here</div>
           </div>
-        </div>
+        </a>
         <a href="/admin/"
-           style="display:inline-flex; align-items:center; gap:7px;
-                  background:#eab308; color:#1a1a1a; border:none;
-                  border-radius:10px; padding:10px 20px;
-                  font-size:13px; font-weight:700;
-                  text-decoration:none; white-space:nowrap;">
-          <i class="fa fa-tools"></i>
-          Open Django Admin
+           style="display:flex;align-items:center;gap:12px;background:#14532d;
+                  border-radius:10px;padding:14px 16px;text-decoration:none;color:#fff;">
+          <i class="fa fa-tools fa-lg"></i>
+          <div>
+            <div style="font-weight:600;font-size:13px;">Django Admin Panel</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.6);">Advanced database management and permissions</div>
+          </div>
         </a>
       </div>
     </div>
   </div>
 
 </div>
+{% endblock %}
 
+{% block extra_css %}
+<style>
+.font-pill {
+  cursor: pointer;
+  margin: 0;
+}
+.font-pill input[type="radio"] {
+  display: none;
+}
+.font-pill span {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  border: 1px solid #bbf7d0;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #fff;
+  color: #166534;
+  user-select: none;
+}
+.font-pill input[type="radio"]:checked + span {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
+}
+</style>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-  function updateSettingsClock() {
-    const now = new Date();
-    const el  = document.getElementById('settings-clock');
-    if (el) {
-      el.textContent =
-        now.toLocaleDateString('en-KE', {
-          weekday: 'short',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        }) + ' ' +
-        String(now.getHours()).padStart(2,'0') + ':' +
-        String(now.getMinutes()).padStart(2,'0') + ':' +
-        String(now.getSeconds()).padStart(2,'0');
-    }
-  }
-  updateSettingsClock();
-  setInterval(updateSettingsClock, 1000);
+const sizeMap = { sm: '12px', md: '14px', lg: '16px', xl: '19px' };
+
+function getChecked(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : 'md';
+}
+
+function updatePreviews() {
+  const ap = document.getElementById('admin-font-preview');
+  const sp = document.getElementById('student-font-preview');
+  if (ap) ap.style.fontSize = sizeMap[getChecked('admin_font_size')] || '14px';
+  if (sp) sp.style.fontSize = sizeMap[getChecked('student_font_size')] || '14px';
+}
+
+document.querySelectorAll('#appearance-form input[type="radio"]').forEach(r => {
+  r.addEventListener('change', updatePreviews);
+});
+
+updatePreviews();
 </script>
 {% endblock %}
