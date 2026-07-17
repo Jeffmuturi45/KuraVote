@@ -84,26 +84,26 @@ WSGI_APPLICATION = 'kuravote.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
 
-# # Switch between local MySQL and Render PostgreSQL
-# if os.environ.get('DATABASE_URL'):
-#     # Render (PostgreSQL)
-#     DATABASES = {
-#         'default': dj_database_url.config(
-#             default=os.environ.get('DATABASE_URL'),
-#             conn_max_age=600,
-#         )
-#     }
-# else:
+# Switch between local MySQL and Render PostgreSQL
+if os.environ.get('DATABASE_URL'):
+    # Render (PostgreSQL)
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+        )
+    }
+else:
 #     # Connection pooling — reuse DB connections instead of
 #     # creating a new one per request
-DATABASES = {
+    DATABASES = {
         'default': {
             'ENGINE':   'django.db.backends.mysql',
             'NAME':     os.getenv('DB_NAME'),
