@@ -6,47 +6,144 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{{ system_name|default:"KuraVote" }}{% endblock %}</title>
 
-  <!-- Preload critical fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-  <!-- Bootstrap 5 (offline) -->
-  <link rel="preload" href="{% static 'css/bootstrap.min.css' %}" as="style">
+  <!-- Bootstrap 5 — local (works offline) -->
   <link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet">
 
-  <!-- Font Awesome -->
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- Font Awesome — local first, CDN fallback -->
+  <link href="{% static 'css/fontawesome/all.min.css' %}" rel="stylesheet"
+        onerror="this.onerror=null;this.href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'">
 
-  <!-- Google Fonts -->
+  <!-- Google Fonts — CDN with system-font fallback (no crash when offline) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  {% if system_settings and system_settings.font_family == 'inter' %}
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  {% elif system_settings and system_settings.font_family == 'poppins' %}
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  {% elif system_settings and system_settings.font_family == 'roboto' %}
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  {% else %}
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+  {% endif %}
 
-  <!-- KuraVote Custom CSS -->
+  <!-- KuraVote base CSS -->
   <link href="{% static 'css/kuravote.css' %}" rel="stylesheet">
 
-  <!-- Dynamic appearance from system settings -->
+  <!-- ── Dynamic Theme + Appearance ────────────────────── -->
   {% if system_settings %}
+  {% with s=system_settings %}
   <style>
-    {% with fs=system_settings.admin_font_size sfs=system_settings.student_font_size bg=system_settings.background_style %}
+    /* ── Font family ── */
+    {% if s.font_family == 'inter' %}
+    :root { --font-body: 'Inter', system-ui, sans-serif; }
+    {% elif s.font_family == 'poppins' %}
+    :root { --font-body: 'Poppins', system-ui, sans-serif; }
+    {% elif s.font_family == 'roboto' %}
+    :root { --font-body: 'Roboto', system-ui, sans-serif; }
+    {% elif s.font_family == 'system' %}
+    :root { --font-body: system-ui, -apple-system, sans-serif; }
+    {% else %}
+    :root { --font-body: 'DM Sans', system-ui, sans-serif; }
+    {% endif %}
+
+    body, .admin-wrapper, .student-shell {
+      font-family: var(--font-body);
+    }
+
+    /* ── Theme colour palette ── */
+    {% if s.theme == 'blue' %}
     :root {
-      {% if bg == 'light' %}--bg: #f8fafc;{% elif bg == 'white' %}--bg: #ffffff;{% else %}--bg: #f0fdf4;{% endif %}
+      --c-primary:    #1d4ed8;
+      --c-primary-dk: #1e3a8a;
+      --c-primary-lt: #eff6ff;
+      --c-accent:     #f59e0b;
+      --c-sidebar:    #1e3a8a;
+      --c-sidebar-lt: #dbeafe;
+      --c-bg:         #f0f7ff;
     }
-    /* Admin panel font size */
+    {% elif s.theme == 'purple' %}
+    :root {
+      --c-primary:    #7c3aed;
+      --c-primary-dk: #4c1d95;
+      --c-primary-lt: #f5f3ff;
+      --c-accent:     #f59e0b;
+      --c-sidebar:    #4c1d95;
+      --c-sidebar-lt: #ede9fe;
+      --c-bg:         #faf5ff;
+    }
+    {% elif s.theme == 'dark' %}
+    :root {
+      --c-primary:    #22d3ee;
+      --c-primary-dk: #0e7490;
+      --c-primary-lt: #083344;
+      --c-accent:     #f59e0b;
+      --c-sidebar:    #0f172a;
+      --c-sidebar-lt: #1e293b;
+      --c-bg:         #0f172a;
+      --c-surface:    #1e293b;
+      --c-text:       #e2e8f0;
+      --c-muted:      #94a3b8;
+    }
+    body, .admin-wrapper, .student-shell { background: #0f172a !important; color: #e2e8f0; }
+    .kura-card, .form-card { background: #1e293b !important; border-color: #334155 !important; }
+    .admin-sidebar { background: #0f172a !important; }
+    .sidebar-item { color: #94a3b8 !important; }
+    .sidebar-item:hover, .sidebar-item.active { background: #1e293b !important; color: #22d3ee !important; }
+    .form-control, .form-select { background: #1e293b !important; border-color: #334155 !important; color: #e2e8f0 !important; }
+    {% elif s.theme == 'custom' %}
+    :root {
+      --c-primary:    {{ s.primary_color }};
+      --c-primary-dk: {{ s.sidebar_color }};
+      --c-primary-lt: #f8f9fa;
+      --c-accent:     {{ s.accent_color }};
+      --c-sidebar:    {{ s.sidebar_color }};
+      --c-sidebar-lt: #f0f0f0;
+      --c-bg:         #f8f9fa;
+    }
+    {% else %} /* green (default) */
+    :root {
+      --c-primary:    #16a34a;
+      --c-primary-dk: #14532d;
+      --c-primary-lt: #f0fdf4;
+      --c-accent:     #eab308;
+      --c-sidebar:    #14532d;
+      --c-sidebar-lt: #dcfce7;
+      --c-bg:         #f0fdf4;
+    }
+    {% endif %}
+
+    /* Apply theme vars to main UI elements */
+    .admin-sidebar                { background: var(--c-sidebar) !important; }
+    .sidebar-item:hover,
+    .sidebar-item.active          { background: rgba(255,255,255,0.12) !important; }
+    .btn-kura, .btn-primary       { background: var(--c-primary) !important;
+                                    border-color: var(--c-primary) !important; }
+    .btn-kura:hover               { background: var(--c-primary-dk) !important; }
+    .sidebar-badge.green          { background: var(--c-accent) !important; }
+    a[style*="color:#16a34a"],
+    a[style*="color:#166534"]     { color: var(--c-primary) !important; }
+    .section-title                { color: var(--c-primary-dk) !important; }
+
+    /* ── Font sizes ── */
     .admin-wrapper {
-      {% if fs == 'sm' %}font-size: 12px;
-      {% elif fs == 'lg' %}font-size: 16px;
-      {% elif fs == 'xl' %}font-size: 19px;
-      {% else %}font-size: 14px;{% endif %}
+      {% if s.admin_font_size == 'sm' %}font-size:12px;
+      {% elif s.admin_font_size == 'lg' %}font-size:16px;
+      {% elif s.admin_font_size == 'xl' %}font-size:19px;
+      {% else %}font-size:14px;{% endif %}
     }
-    /* Student panel font size */
     .student-shell, .student-content {
-      {% if sfs == 'sm' %}font-size: 12px;
-      {% elif sfs == 'lg' %}font-size: 16px;
-      {% elif sfs == 'xl' %}font-size: 19px;
-      {% else %}font-size: 14px;{% endif %}
+      {% if s.student_font_size == 'sm' %}font-size:12px;
+      {% elif s.student_font_size == 'lg' %}font-size:16px;
+      {% elif s.student_font_size == 'xl' %}font-size:19px;
+      {% else %}font-size:14px;{% endif %}
     }
-    {% endwith %}
+
+    /* ── Custom CSS (power-user field) ── */
+    {{ s.custom_css|safe }}
   </style>
+  {% endwith %}
   {% endif %}
+  <!-- ─────────────────────────────────────────────────── -->
 
   {% block extra_css %}{% endblock %}
 </head>
@@ -56,13 +153,12 @@
   <div id="page-loader">
     <div class="loader-inner">
       <div class="spinner-border text-primary" role="status"></div>
-      <div class="loader-brand mt-3">Kura<span>Vote</span></div>
+      <div class="loader-brand mt-3">{{ system_name|default:"KuraVote" }}</div>
     </div>
   </div>
 
   <!-- ── Toast Notifications ── -->
-  <div class="toast-container position-fixed top-0 end-0 p-3"
-       style="z-index: 9999">
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:9999">
     {% if messages %}
       {% for message in messages %}
         <div class="toast align-items-center border-0 show
@@ -73,19 +169,13 @@
           role="alert" data-bs-autohide="true" data-bs-delay="4000">
           <div class="d-flex">
             <div class="toast-body d-flex align-items-center gap-2">
-              {% if message.tags == 'success' %}
-                <i class="fa fa-check-circle"></i>
-              {% elif message.tags == 'error' %}
-                <i class="fa fa-exclamation-circle"></i>
-              {% elif message.tags == 'warning' %}
-                <i class="fa fa-exclamation-triangle"></i>
-              {% else %}
-                <i class="fa fa-info-circle"></i>
-              {% endif %}
+              {% if message.tags == 'success' %}<i class="fa fa-check-circle"></i>
+              {% elif message.tags == 'error' %}<i class="fa fa-exclamation-circle"></i>
+              {% elif message.tags == 'warning' %}<i class="fa fa-exclamation-triangle"></i>
+              {% else %}<i class="fa fa-info-circle"></i>{% endif %}
               {{ message }}
             </div>
-            <button type="button"
-                    class="btn-close btn-close-white me-2 m-auto"
+            <button type="button" class="btn-close btn-close-white me-2 m-auto"
                     data-bs-dismiss="toast"></button>
           </div>
         </div>
@@ -95,23 +185,17 @@
 
   {% block content %}{% endblock %}
 
-<!-- Bootstrap JS (offline) -->
+  <!-- Bootstrap JS — local (works offline) -->
   <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
 
   <!-- KuraVote JS -->
   <script src="{% static 'js/kuravote.js' %}"></script>
 
-  <!-- Initialize Toasts -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
-      // Hide page loader
       const loader = document.getElementById('page-loader');
       if (loader) loader.style.display = 'none';
-
-      // Initialize all toasts
-      document.querySelectorAll('.toast').forEach(function (el) {
-        new bootstrap.Toast(el).show();
-      });
+      document.querySelectorAll('.toast').forEach(el => new bootstrap.Toast(el).show());
     });
   </script>
 

@@ -1,0 +1,100 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}{{ system_name }} — Tie Detection{% endblock %}
+{% block nav_elections %}active{% endblock %}
+{% block page_title %}Tie Detection & Re-run{% endblock %}
+
+{% block admin_content %}
+<div class="action-bar mb-4">
+  <div>
+    <div class="section-title mb-1">Tie Detection — {{ election.election_name }}</div>
+    <div class="section-sub">Select which tied positions should go to a re-run vote</div>
+  </div>
+  <a href="{% url 'admin_elections' %}" class="btn-kura-outline">
+    <i class="fa fa-arrow-left me-1"></i>Back to Elections
+  </a>
+</div>
+
+{% if election.status == 'rerun' %}
+<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:12px;padding:16px;margin-bottom:24px;display:flex;align-items:center;gap:12px;">
+  <i class="fa fa-bolt" style="color:#d97706;font-size:1.3rem;"></i>
+  <div>
+    <div style="font-weight:600;color:#92400e;">Re-run is currently in progress</div>
+    <div style="font-size:13px;color:#78350f;">Students are now voting on the tied positions. Close the re-run when done.</div>
+  </div>
+  <form method="POST" action="{% url 'admin_close_rerun' election.id %}" style="margin-left:auto;">
+    {% csrf_token %}
+    <button type="submit" class="btn-kura" style="background:#dc2626;"
+            onclick="return confirm('Close the re-run and finalise all results?')">
+      <i class="fa fa-flag-checkered me-1"></i>Close Re-run & Finalise
+    </button>
+  </form>
+</div>
+{% endif %}
+
+{% if tied_positions %}
+<form method="POST" action="{% url 'admin_start_rerun' election.id %}">
+  {% csrf_token %}
+  <div class="kura-card" style="padding:0;overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#7f1d1d,#991b1b);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="color:#fff;">
+        <div style="font-weight:700;font-size:15px;"><i class="fa fa-balance-scale me-2"></i>{{ tied_positions|length }} Position(s) with Ties Detected</div>
+        <div style="font-size:12px;opacity:0.7;margin-top:3px;">Select which positions should go to a re-run. Previous votes for those positions will be cleared.</div>
+      </div>
+    </div>
+
+    {% for item in tied_positions %}
+    <div style="padding:20px;border-bottom:1px solid #fef2f2;{% if item.is_rerun %}background:#fff7ed;{% endif %}">
+      <div style="display:flex;align-items:flex-start;gap:16px;">
+        <input type="checkbox" name="position_ids" value="{{ item.position.id }}"
+               id="pos_{{ item.position.id }}"
+               {% if item.is_rerun %}checked{% endif %}
+               style="width:18px;height:18px;margin-top:3px;accent-color:#dc2626;">
+        <label for="pos_{{ item.position.id }}" style="flex:1;cursor:pointer;">
+          <div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:6px;">
+            {{ item.position.position_name }}
+            {% if item.is_rerun %}
+              <span style="background:#f59e0b;color:#fff;font-size:10px;padding:2px 8px;border-radius:6px;margin-left:8px;">CURRENTLY IN RE-RUN</span>
+            {% endif %}
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:10px;">
+            <i class="fa fa-users me-1"></i>{{ item.tied_count }} candidates tied at <strong>{{ item.vote_count }} votes</strong> each
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            {% for c in item.candidates %}
+            <span style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:4px 12px;font-size:12px;font-weight:500;">
+              <i class="fa fa-user me-1"></i>{{ c.student.get_full_name }} — {{ c.vote_count }} votes
+            </span>
+            {% endfor %}
+          </div>
+        </label>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if election.status != 'rerun' %}
+  <div style="margin-top:20px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:16px;margin-bottom:20px;">
+    <i class="fa fa-exclamation-triangle" style="color:#d97706;"></i>
+    <strong style="color:#92400e;">Warning:</strong>
+    <span style="color:#78350f;font-size:13px;">
+      Starting a re-run will delete all votes for the selected positions and allow students to vote again. Votes for non-tied positions are preserved.
+    </span>
+  </div>
+  <button type="submit" class="btn-kura" style="background:#dc2626;"
+          onclick="return confirm('Start re-run for selected positions? This will clear votes for those positions.')">
+    <i class="fa fa-redo me-2"></i>Start Re-run for Selected Positions
+  </button>
+  {% endif %}
+</form>
+
+{% else %}
+<div style="text-align:center;padding:60px;background:#fff;border-radius:16px;border:1px solid #d1fae5;">
+  <i class="fa fa-check-circle" style="font-size:3rem;color:#16a34a;margin-bottom:16px;display:block;"></i>
+  <div style="font-family:'Sora',sans-serif;font-size:1.1rem;color:#166534;font-weight:600;margin-bottom:8px;">No Ties Found</div>
+  <div style="color:#94a3b8;font-size:13px;">All positions have a clear winner. No re-run is needed.</div>
+  <a href="{% url 'admin_reports' election.id %}" class="btn-kura" style="margin-top:16px;display:inline-block;">
+    <i class="fa fa-chart-bar me-2"></i>View Final Results
+  </a>
+</div>
+{% endif %}
+{% endblock %}

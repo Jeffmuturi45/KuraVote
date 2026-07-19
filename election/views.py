@@ -205,7 +205,7 @@ def student_dashboard(request):
     # MultipleObjectsReturned (500) if admin accidentally
     # has more than one active election in DB.
     election = Election.objects.filter(
-        status=Election.STATUS_ACTIVE
+        status__in=[Election.STATUS_ACTIVE, Election.STATUS_RERUN]
     ).order_by('-created_at').first()
 
     voted_positions = []
@@ -248,15 +248,21 @@ def ballot_view(request):
         return redirect('student_dashboard')
 
     election = Election.objects.filter(
-        status=Election.STATUS_ACTIVE
+        status__in=[Election.STATUS_ACTIVE, Election.STATUS_RERUN]
     ).order_by('-created_at').first()
     if not election:
         messages.error(request, 'No active election at the moment.')
         return redirect('student_dashboard')
 
-    positions = Position.objects.filter(
-        election=election
-    ).prefetch_related('candidates__student')
+    # In rerun mode, only show positions flagged for re-run
+    if election.status == Election.STATUS_RERUN:
+        positions = Position.objects.filter(
+            election=election, is_rerun=True
+        ).prefetch_related('candidates__student')
+    else:
+        positions = Position.objects.filter(
+            election=election
+        ).prefetch_related('candidates__student')
 
     voted_position_ids = list(
         Vote.objects.filter(
@@ -315,7 +321,7 @@ def cast_vote(request):
         return redirect('ballot')
 
     election = Election.objects.filter(
-        status=Election.STATUS_ACTIVE
+        status__in=[Election.STATUS_ACTIVE, Election.STATUS_RERUN]
     ).order_by('-created_at').first()
     if not election:
         messages.error(request, 'No active election at the moment.')
@@ -501,7 +507,7 @@ def student_profile(request):
             )
 
     election = Election.objects.filter(
-        status=Election.STATUS_ACTIVE
+        status__in=[Election.STATUS_ACTIVE, Election.STATUS_RERUN]
     ).order_by('-created_at').first()
     if election:
         voted_positions = list(
@@ -1704,7 +1710,8 @@ def export_pdf(request, election_id):
         if candidates and pos_total > 0 and candidates[0].vote_count > 0:
             top_votes = candidates[0].vote_count
             tied = [c for c in candidates if c.vote_count == top_votes]
-            winner = _resolve_tiebreak(position, election, tied) if len(tied) > 1 else candidates[0]
+            winner = _resolve_tiebreak(position, election, tied) if len(
+                tied) > 1 else candidates[0]
 
         elements.append(
             Paragraph(position.position_name, styles['Heading3'])
@@ -1856,7 +1863,8 @@ def export_excel(request, election_id):
         if candidates and pos_total > 0 and candidates[0].vote_count > 0:
             top_votes = candidates[0].vote_count
             tied = [c for c in candidates if c.vote_count == top_votes]
-            winner = _resolve_tiebreak(position, election, tied) if len(tied) > 1 else candidates[0]
+            winner = _resolve_tiebreak(position, election, tied) if len(
+                tied) > 1 else candidates[0]
 
         ws.merge_cells(f'A{current_row}:F{current_row}')
         pos_cell = ws.cell(
@@ -2021,15 +2029,37 @@ def admin_settings(request):
         elif action == 'appearance':
             admin_font = request.POST.get('admin_font_size', 'md')
             student_font = request.POST.get('student_font_size', 'md')
-            bg_style = request.POST.get('background_style', 'default')
+            theme = request.POST.get('theme', 'green')
+            font_family = request.POST.get('font_family', 'dmsans')
+            custom_css = request.POST.get('custom_css', '')
+
             valid_fonts = ('sm', 'md', 'lg', 'xl')
-            valid_bg = ('default', 'light', 'white')
+            valid_themes = ('green', 'blue', 'purple', 'dark', 'custom')
+            valid_ff = ('dmsans', 'inter', 'poppins', 'roboto', 'system')
+
             if admin_font in valid_fonts:
                 settings_obj.admin_font_size = admin_font
             if student_font in valid_fonts:
                 settings_obj.student_font_size = student_font
-            if bg_style in valid_bg:
-                settings_obj.background_style = bg_style
+            if theme in valid_themes:
+                settings_obj.theme = theme
+            if font_family in valid_ff:
+                settings_obj.font_family = font_family
+
+            # Custom colour pickers (only meaningful when theme == 'custom')
+            import re
+            hex_re = re.compile(r'^#[0-9a-fA-F]{6}$')
+            for field in ('primary_color', 'sidebar_color', 'accent_color'):
+                val = request.POST.get(field, '')
+                if hex_re.match(val):
+                    setattr(settings_obj, field, val)
+
+            # Custom CSS — basic sanitisation (strip <script> tags)
+            import html
+            safe_css = custom_css.replace(
+                '<script', '').replace('</script', '')
+            settings_obj.custom_css = safe_css
+
             settings_obj.save()
             messages.success(request, 'Appearance settings saved.')
 
@@ -2039,10 +2069,38 @@ def admin_settings(request):
     total_students = Student.objects.filter(is_staff=False).count()
     total_elections = Election.objects.count()
 
+    # (value, label, sidebar_hex, primary_hex, light_bg_hex)
+    theme_options = [
+        ('green',  'Green',  '#14532d', '#16a34a', '#f0fdf4'),
+        ('blue',   'Blue',   '#1e3a8a', '#1d4ed8', '#eff6ff'),
+        ('purple', 'Purple', '#4c1d95', '#7c3aed', '#f5f3ff'),
+        ('dark',   'Dark',   '#0f172a', '#22d3ee', '#1e293b'),
+        ('custom', 'Custom', settings_obj.sidebar_color,
+         settings_obj.primary_color, '#f8fafc'),
+    ]
+    # (value, label, css_font_stack)
+    font_options = [
+        ('dmsans', 'DM Sans',    "'DM Sans', system-ui, sans-serif"),
+        ('inter',  'Inter',      "'Inter', system-ui, sans-serif"),
+        ('poppins', 'Poppins',    "'Poppins', system-ui, sans-serif"),
+        ('roboto', 'Roboto',     "'Roboto', system-ui, sans-serif"),
+        ('system', 'System UI',  "system-ui, -apple-system, sans-serif"),
+    ]
+    # (value, label)
+    size_options = [
+        ('sm', 'Small'),
+        ('md', 'Medium'),
+        ('lg', 'Large'),
+        ('xl', 'X-Large'),
+    ]
+
     context = {
-        'settings_obj':   settings_obj,
-        'total_students': total_students,
+        'settings_obj':    settings_obj,
+        'total_students':  total_students,
         'total_elections': total_elections,
+        'theme_options':   theme_options,
+        'font_options':    font_options,
+        'size_options':    size_options,
     }
     return render(request, 'admin/settings.html', context)
 
@@ -2169,6 +2227,119 @@ def admin_tiebreak_log(request):
         'position', 'election'
     ).order_by('-resolved_at')
     return render(request, 'admin/tiebreak_log.html', {'logs': logs})
+
+
+# ── Tie Re-run Management ─────────────────────────────────
+
+@staff_member_required(login_url='login')
+def admin_detect_ties(request, election_id):
+    """Scan a closed election for tied positions and present them
+    to the admin for re-run scheduling."""
+    election = get_object_or_404(Election, pk=election_id)
+    if election.status not in (Election.STATUS_CLOSED,
+                               Election.STATUS_ACTIVE,
+                               Election.STATUS_RERUN):
+        messages.error(
+            request, 'Tie detection only available on active, closed, or rerun elections.')
+        return redirect('admin_elections')
+
+    tied_positions = []
+    for position in election.positions.prefetch_related('candidates'):
+        candidates = sorted(
+            position.candidates.select_related('student'),
+            key=lambda c: c.vote_count,
+            reverse=True
+        )
+        if not candidates:
+            continue
+        top_votes = candidates[0].vote_count
+        if top_votes == 0:
+            continue
+        tied = [c for c in candidates if c.vote_count == top_votes]
+        if len(tied) > 1:
+            tied_positions.append({
+                'position':   position,
+                'tied_count': len(tied),
+                'vote_count': top_votes,
+                'candidates': tied,
+                'is_rerun':   position.is_rerun,
+            })
+
+    return render(request, 'admin/detect_ties.html', {
+        'election':       election,
+        'tied_positions': tied_positions,
+    })
+
+
+@staff_member_required(login_url='login')
+def admin_start_rerun(request, election_id):
+    """Admin marks selected tied positions for re-run and sets election
+    status to STATUS_RERUN. Votes on non-tied positions are preserved.
+    Students can only vote on the rerun positions."""
+    if request.method != 'POST':
+        return redirect('admin_elections')
+
+    election = get_object_or_404(Election, pk=election_id)
+    position_ids = request.POST.getlist('position_ids')
+
+    if not position_ids:
+        messages.error(
+            request, 'Please select at least one position for re-run.')
+        return redirect('admin_detect_ties', election_id=election_id)
+
+    # Mark positions as rerun
+    Position.objects.filter(
+        pk__in=position_ids, election=election
+    ).update(is_rerun=True)
+
+    # Delete only votes for the rerun positions so students can re-vote
+    Vote.objects.filter(
+        election=election,
+        position_id__in=position_ids
+    ).delete()
+
+    # Set election to RERUN status
+    election.status = Election.STATUS_RERUN
+    election.announcement = (
+        '⚡ A tie was detected in this election. '
+        'A re-run is now in progress for the tied positions. '
+        'Please cast your vote again for the positions listed.'
+    )
+    election.save()
+
+    n = len(position_ids)
+    messages.success(
+        request,
+        f'Re-run started for {n} position(s). '
+        f'Students can now vote again on the tied positions. '
+        f'Election status set to "Re-run".'
+    )
+    return redirect('admin_elections')
+
+
+@staff_member_required(login_url='login')
+def admin_close_rerun(request, election_id):
+    """Admin closes the rerun phase and finalises results."""
+    if request.method != 'POST':
+        return redirect('admin_elections')
+
+    election = get_object_or_404(Election, pk=election_id)
+    if election.status != Election.STATUS_RERUN:
+        messages.error(request, 'Election is not in re-run status.')
+        return redirect('admin_elections')
+
+    # Clear the rerun flags
+    election.positions.update(is_rerun=False)
+    election.status = Election.STATUS_CLOSED
+    election.announcement = ''
+    election.save()
+
+    messages.success(
+        request,
+        'Re-run closed. Election is now fully closed. '
+        'View final results in Reports.'
+    )
+    return redirect('admin_elections')
 
 
 # ═══════════════════════════════════════════════

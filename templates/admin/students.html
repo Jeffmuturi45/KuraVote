@@ -108,15 +108,24 @@
   Upload CSV
 </button>
 
-    <!-- Delete selected / all -->
+    <!-- Delete Selected (only enabled when rows checked) -->
     <button type="button"
             class="btn-kura"
             style="background:#dc2626;"
             id="bulk-delete-btn"
-            onclick="openDeleteAllModal()"
+            onclick="openDeleteSelectedModal()"
             disabled>
       <i class="fa fa-trash"></i>
-      <span id="bulk-delete-label">Delete All</span>
+      <span id="bulk-delete-label">Delete Selected</span>
+    </button>
+
+    <!-- Delete ALL students (always available, requires typing DELETE) -->
+    <button type="button"
+            class="btn-kura"
+            style="background:#7f1d1d;border:2px solid #dc2626;"
+            onclick="openDeleteAllModal()">
+      <i class="fa fa-trash-alt"></i>
+      <span>Delete All</span>
     </button>
 
   </div>
@@ -1420,9 +1429,9 @@ function updateBulkBar() {
     bar.style.display  = 'flex';
     count.textContent  = n;
     delBtn.disabled    = false;
-    delLbl.textContent = `Delete (${n})`;
+    delLbl.textContent = `Delete Selected (${n})`;
 
-    // Show banner only when all visible rows are checked and there are more pages
+    // Show "select all pages" banner
     const visibleRows = document.querySelectorAll('.student-row:not([style*="display: none"])');
     const allVisibleChecked = visibleRows.length > 0 &&
       Array.from(visibleRows).every(r => r.querySelector('.row-checkbox').checked);
@@ -1444,7 +1453,7 @@ function updateBulkBar() {
     banner.style.display = 'none';
     allPagesSelected     = false;
     delBtn.disabled      = true;
-    delLbl.textContent   = 'Delete All';
+    delLbl.textContent   = 'Delete Selected';
   }
 }
 
@@ -1509,20 +1518,25 @@ function submitBulkForm(action) {
 
 // ── Delete modal ───────────────────────────────────────────
 function openDeleteAllModal() {
-  const n = selectedIds.size;
+  // Always delete ALL students regardless of what is selected
+  openDeleteModal(
+    'Delete ALL Students',
+    'Permanently delete ALL {{ students.paginator.count }} students from the system. This cannot be undone.',
+    'delete_all'
+  );
+}
+
+function openDeleteSelectedModal() {
+  const n = allPagesSelected ? {{ students.paginator.count }} : selectedIds.size;
   if (n === 0) {
-    openDeleteModal(
-      'Delete All Students',
-      'Permanently delete ALL {{ students.paginator.count }} students and all their votes.',
-      'delete_all'
-    );
-  } else {
-    openDeleteModal(
-      `Delete ${n} Selected Students`,
-      `Permanently delete ${n} selected student(s) and all their votes.`,
-      'delete'
-    );
+    alert('Please select at least one student first.');
+    return;
   }
+  openDeleteModal(
+    `Delete ${n} Selected Student${n !== 1 ? 's' : ''}`,
+    `Permanently delete ${n} selected student(s) and all their associated votes.`,
+    'delete'
+  );
 }
 
 function openDeleteModal(title, desc, action) {

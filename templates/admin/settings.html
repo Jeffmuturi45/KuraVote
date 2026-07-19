@@ -1,5 +1,4 @@
 {% extends 'admin/base_admin.html' %}
-
 {% block title %}{{ system_name }} — Settings{% endblock %}
 {% block nav_settings %}active{% endblock %}
 {% block page_title %}Settings{% endblock %}
@@ -8,41 +7,37 @@
 {% block admin_content %}
 <div class="row g-4">
 
-  <!-- ── System Overview ──────────────────────────────── -->
+  <!-- ══ System Overview ═════════════════════════════════ -->
   <div class="col-12">
     <div class="form-card">
       <div class="section-title mb-1">System Overview</div>
-      <div class="section-sub mb-4">Live system statistics</div>
+      <div class="section-sub mb-4">Live statistics for this installation</div>
       <div class="row g-3">
         <div class="col-md-3 col-6">
           <div class="stat-card">
-            <div class="stat-label"><i class="fa fa-id-badge" style="color:#16a34a;"></i> System Name</div>
+            <div class="stat-label"><i class="fa fa-id-badge" style="color:var(--c-primary,#16a34a);"></i> System Name</div>
             <div class="stat-value" style="font-size:1rem;">{{ settings_obj.system_name }}</div>
           </div>
         </div>
         <div class="col-md-3 col-6">
           <div class="stat-card">
-            <div class="stat-label"><i class="fa fa-users" style="color:#16a34a;"></i> Total Students</div>
+            <div class="stat-label"><i class="fa fa-users" style="color:var(--c-primary,#16a34a);"></i> Students</div>
             <div class="stat-value">{{ total_students }}</div>
           </div>
         </div>
         <div class="col-md-3 col-6">
           <div class="stat-card">
-            <div class="stat-label"><i class="fa fa-vote-yea" style="color:#16a34a;"></i> Elections</div>
+            <div class="stat-label"><i class="fa fa-vote-yea" style="color:var(--c-primary,#16a34a);"></i> Elections</div>
             <div class="stat-value">{{ total_elections }}</div>
           </div>
         </div>
         <div class="col-md-3 col-6">
           <div class="stat-card">
-            <div class="stat-label"><i class="fa fa-bolt" style="color:#16a34a;"></i> Active Election</div>
+            <div class="stat-label"><i class="fa fa-bolt" style="color:var(--c-primary,#16a34a);"></i> Active Election</div>
             <div class="stat-value" style="font-size:0.85rem;">
               {% if active_election %}
-                <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600;">
-                  {{ active_election.election_name }}
-                </span>
-              {% else %}
-                <span style="color:#94a3b8;font-size:13px;">None</span>
-              {% endif %}
+                <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600;">{{ active_election.election_name }}</span>
+              {% else %}<span style="color:#94a3b8;font-size:13px;">None</span>{% endif %}
             </div>
           </div>
         </div>
@@ -50,11 +45,11 @@
     </div>
   </div>
 
-  <!-- ── System Identity ──────────────────────────────── -->
+  <!-- ══ System Identity ══════════════════════════════════ -->
   <div class="col-lg-6">
-    <div class="form-card">
+    <div class="form-card h-100">
       <div class="section-title mb-1">System Identity</div>
-      <div class="section-sub mb-4">Name shown in login pages and OTP authenticator apps</div>
+      <div class="section-sub mb-4">Name shown in browser tabs, navbar, and OTP authenticator apps</div>
       <form method="POST">
         {% csrf_token %}
         <input type="hidden" name="settings_action" value="system">
@@ -62,12 +57,11 @@
           <label class="form-label" style="font-size:0.85rem;font-weight:500;">System Name</label>
           <input type="text" name="system_name" class="form-control"
                  value="{{ settings_obj.system_name }}" maxlength="100" required>
-          <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px;">
-            <i class="fa fa-info-circle me-1"></i>
-            Appears in 2FA authenticator app, browser tabs, and navbar.
+          <div style="font-size:0.73rem;color:#94a3b8;margin-top:4px;">
+            <i class="fa fa-info-circle me-1"></i>Appears in 2FA authenticator app, page title, and sidebar.
           </div>
         </div>
-        <div class="mb-3">
+        <div class="mb-4">
           <label class="form-label" style="font-size:0.85rem;font-weight:500;">Institution Name</label>
           <input type="text" name="institution_name" class="form-control"
                  value="{{ settings_obj.institution_name }}" maxlength="200"
@@ -80,11 +74,11 @@
     </div>
   </div>
 
-  <!-- ── Security / 2FA ───────────────────────────────── -->
+  <!-- ══ 2FA Security ══════════════════════════════════════ -->
   <div class="col-lg-6">
-    <div class="form-card">
+    <div class="form-card h-100">
       <div class="section-title mb-1">Security — Two-Factor Authentication</div>
-      <div class="section-sub mb-4">Control admin 2FA requirement system-wide</div>
+      <div class="section-sub mb-4">Controls whether admins must pass OTP on login</div>
       <form method="POST">
         {% csrf_token %}
         <input type="hidden" name="settings_action" value="security">
@@ -95,23 +89,21 @@
           <div>
             <div style="font-weight:600;font-size:14px;
                         {% if settings_obj.two_fa_enabled %}color:#166534;{% else %}color:#dc2626;{% endif %}">
-              2FA is currently <strong>{% if settings_obj.two_fa_enabled %}ENABLED{% else %}DISABLED{% endif %}</strong>
+              2FA is <strong>{% if settings_obj.two_fa_enabled %}ENABLED{% else %}DISABLED{% endif %}</strong>
             </div>
             <div style="font-size:12px;color:#64748b;margin-top:3px;">
               {% if settings_obj.two_fa_enabled %}
-                Admins must verify via Google Authenticator / Authy on every login.
+                Admins must verify via Google Authenticator / Authy.
               {% else %}
-                Admins can log in without a second factor. Enable for production use.
+                Admins can log in without a second factor. Enable for production.
               {% endif %}
             </div>
           </div>
           <label style="position:relative;display:inline-block;width:52px;height:28px;flex-shrink:0;cursor:pointer;">
             <input type="checkbox" name="two_fa_enabled"
                    {% if settings_obj.two_fa_enabled %}checked{% endif %}
-                   onchange="this.form.submit()"
-                   style="opacity:0;width:0;height:0;">
-            <span id="fa-toggle-track"
-                  style="position:absolute;inset:0;border-radius:28px;transition:0.3s;
+                   onchange="this.form.submit()" style="opacity:0;width:0;height:0;">
+            <span style="position:absolute;inset:0;border-radius:28px;transition:0.3s;
                          background:{% if settings_obj.two_fa_enabled %}#16a34a{% else %}#d1d5db{% endif %};">
               <span style="position:absolute;height:22px;width:22px;bottom:3px;border-radius:50%;
                            background:#fff;transition:0.3s;display:block;
@@ -119,127 +111,218 @@
             </span>
           </label>
         </div>
-        <div style="font-size:12px;color:#94a3b8;background:#f8fafc;border-radius:8px;padding:10px 14px;">
-          <i class="fa fa-shield-alt me-1" style="color:#166534;"></i>
-          <strong>Recommendation:</strong> Keep 2FA enabled in production. Only disable for testing.
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="{% url 'admin_setup_otp' %}" class="btn-kura-outline">
+            <i class="fa fa-qrcode me-1"></i>Reset 2FA Device
+          </a>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- ── Appearance ───────────────────────────────────── -->
+  <!-- ══ APPEARANCE ════════════════════════════════════════ -->
   <div class="col-12">
     <div class="form-card">
       <div class="section-title mb-1">Appearance</div>
-      <div class="section-sub mb-4">Font size for admin and student dashboards, plus background style</div>
+      <div class="section-sub mb-4">Theme, fonts, and sizing — changes apply instantly across the entire system</div>
       <form method="POST" id="appearance-form">
         {% csrf_token %}
         <input type="hidden" name="settings_action" value="appearance">
+
         <div class="row g-4">
 
-          <!-- Admin font -->
-          <div class="col-md-4">
-            <label class="form-label" style="font-size:0.85rem;font-weight:600;">
-              <i class="fa fa-user-shield me-1" style="color:#166534;"></i>Admin Font Size
+          <!-- ── Theme ──────────────────────────── -->
+          <div class="col-12">
+            <label class="form-label" style="font-size:0.9rem;font-weight:700;">
+              <i class="fa fa-palette me-2" style="color:var(--c-primary,#16a34a);"></i>Theme
             </label>
-            <div class="d-flex gap-2 flex-wrap" id="admin-font-group">
-              <label class="font-pill">
-                <input type="radio" name="admin_font_size" value="sm" {% if settings_obj.admin_font_size == 'sm' %}checked{% endif %}>
-                <span>Small</span>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;" id="theme-picker">
+
+              {% for t_val,t_label,t_sidebar,t_primary,t_lt in theme_options %}
+              <label class="theme-card" style="cursor:pointer;">
+                <input type="radio" name="theme" value="{{ t_val }}"
+                       {% if settings_obj.theme == t_val %}checked{% endif %}
+                       style="display:none;">
+                <div class="theme-preview {% if settings_obj.theme == t_val %}selected{% endif %}"
+                     style="width:120px;border-radius:12px;overflow:hidden;
+                            border:2px solid {% if settings_obj.theme == t_val %}{{ t_primary }}{% else %}#e2e8f0{% endif %};
+                            transition:all 0.15s;box-shadow:{% if settings_obj.theme == t_val %}0 0 0 3px {{ t_primary }}33{% else %}none{% endif %};">
+                  <!-- Mini sidebar -->
+                  <div style="display:flex;height:70px;">
+                    <div style="width:30px;background:{{ t_sidebar }};display:flex;flex-direction:column;gap:5px;padding:8px 5px;">
+                      <div style="height:4px;border-radius:2px;background:rgba(255,255,255,0.4);"></div>
+                      <div style="height:4px;border-radius:2px;background:rgba(255,255,255,0.25);"></div>
+                      <div style="height:4px;border-radius:2px;background:rgba(255,255,255,0.25);"></div>
+                    </div>
+                    <!-- Mini content -->
+                    <div style="flex:1;background:{{ t_lt }};padding:6px;">
+                      <div style="height:4px;border-radius:2px;background:{{ t_primary }};margin-bottom:4px;"></div>
+                      <div style="height:3px;border-radius:2px;background:#e2e8f0;margin-bottom:3px;"></div>
+                      <div style="height:3px;border-radius:2px;background:#e2e8f0;width:60%;"></div>
+                    </div>
+                  </div>
+                  <div style="padding:5px 8px;background:#fff;border-top:1px solid #f0f0f0;
+                              font-size:11px;font-weight:600;color:#334155;text-align:center;">
+                    {{ t_label }}
+                    {% if settings_obj.theme == t_val %}
+                      <i class="fa fa-check-circle ms-1" style="color:{{ t_primary }};font-size:10px;"></i>
+                    {% endif %}
+                  </div>
+                </div>
               </label>
-              <label class="font-pill">
-                <input type="radio" name="admin_font_size" value="md" {% if settings_obj.admin_font_size == 'md' or not settings_obj.admin_font_size %}checked{% endif %}>
-                <span>Medium</span>
-              </label>
-              <label class="font-pill">
-                <input type="radio" name="admin_font_size" value="lg" {% if settings_obj.admin_font_size == 'lg' %}checked{% endif %}>
-                <span>Large</span>
-              </label>
-              <label class="font-pill">
-                <input type="radio" name="admin_font_size" value="xl" {% if settings_obj.admin_font_size == 'xl' %}checked{% endif %}>
-                <span>X-Large</span>
-              </label>
-            </div>
-            <div style="font-size:0.75rem;color:#94a3b8;margin-top:8px;">
-              Preview: <span id="admin-font-preview">The quick brown fox</span>
+              {% endfor %}
+
             </div>
           </div>
 
-          <!-- Student font -->
-          <div class="col-md-4">
-            <label class="form-label" style="font-size:0.85rem;font-weight:600;">
-              <i class="fa fa-user-graduate me-1" style="color:#166534;"></i>Student Font Size
-            </label>
-            <div class="d-flex gap-2 flex-wrap" id="student-font-group">
-              <label class="font-pill">
-                <input type="radio" name="student_font_size" value="sm" {% if settings_obj.student_font_size == 'sm' %}checked{% endif %}>
-                <span>Small</span>
-              </label>
-              <label class="font-pill">
-                <input type="radio" name="student_font_size" value="md" {% if settings_obj.student_font_size == 'md' or not settings_obj.student_font_size %}checked{% endif %}>
-                <span>Medium</span>
-              </label>
-              <label class="font-pill">
-                <input type="radio" name="student_font_size" value="lg" {% if settings_obj.student_font_size == 'lg' %}checked{% endif %}>
-                <span>Large</span>
-              </label>
-              <label class="font-pill">
-                <input type="radio" name="student_font_size" value="xl" {% if settings_obj.student_font_size == 'xl' %}checked{% endif %}>
-                <span>X-Large</span>
-              </label>
-            </div>
-            <div style="font-size:0.75rem;color:#94a3b8;margin-top:8px;">
-              Preview: <span id="student-font-preview">The quick brown fox</span>
+          <!-- ── Custom Colour Pickers (shown only for custom theme) ── -->
+          <div class="col-12" id="custom-colors-section"
+               style="display:{% if settings_obj.theme == 'custom' %}block{% else %}none{% endif %};">
+            <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:16px;">
+              <div style="font-size:0.85rem;font-weight:600;color:#334155;margin-bottom:14px;">
+                <i class="fa fa-brush me-2" style="color:#7c3aed;"></i>Custom Colours
+              </div>
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <label class="form-label" style="font-size:0.8rem;font-weight:500;">Primary Colour</label>
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <input type="color" name="primary_color" value="{{ settings_obj.primary_color }}"
+                           style="width:46px;height:36px;border-radius:8px;border:1px solid #e2e8f0;cursor:pointer;padding:2px;">
+                    <input type="text" id="primary-hex" value="{{ settings_obj.primary_color }}"
+                           maxlength="7" style="width:90px;" class="form-control form-control-sm"
+                           oninput="syncColor('primary_color','primary-hex',this.value)">
+                  </div>
+                  <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Buttons, links, highlights</div>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" style="font-size:0.8rem;font-weight:500;">Sidebar Colour</label>
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <input type="color" name="sidebar_color" value="{{ settings_obj.sidebar_color }}"
+                           style="width:46px;height:36px;border-radius:8px;border:1px solid #e2e8f0;cursor:pointer;padding:2px;">
+                    <input type="text" id="sidebar-hex" value="{{ settings_obj.sidebar_color }}"
+                           maxlength="7" class="form-control form-control-sm"
+                           oninput="syncColor('sidebar_color','sidebar-hex',this.value)">
+                  </div>
+                  <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Navigation sidebar background</div>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" style="font-size:0.8rem;font-weight:500;">Accent Colour</label>
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <input type="color" name="accent_color" value="{{ settings_obj.accent_color }}"
+                           style="width:46px;height:36px;border-radius:8px;border:1px solid #e2e8f0;cursor:pointer;padding:2px;">
+                    <input type="text" id="accent-hex" value="{{ settings_obj.accent_color }}"
+                           maxlength="7" class="form-control form-control-sm"
+                           oninput="syncColor('accent_color','accent-hex',this.value)">
+                  </div>
+                  <div style="font-size:0.72rem;color:#94a3b8;margin-top:4px;">Badges, icons, active states</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Background -->
-          <div class="col-md-4">
-            <label class="form-label" style="font-size:0.85rem;font-weight:600;">
-              <i class="fa fa-palette me-1" style="color:#166534;"></i>Background Style
+          <!-- ── Font Family ─────────────────────── -->
+          <div class="col-lg-6">
+            <label class="form-label" style="font-size:0.9rem;font-weight:700;">
+              <i class="fa fa-font me-2" style="color:var(--c-primary,#16a34a);"></i>Font Family
             </label>
-            <div class="d-flex gap-2 flex-wrap">
-              <label class="font-pill">
-                <input type="radio" name="background_style" value="default" {% if settings_obj.background_style == 'default' or not settings_obj.background_style %}checked{% endif %}>
-                <span style="display:flex;align-items:center;gap:5px;">
-                  <span style="width:10px;height:10px;border-radius:50%;background:#f0fdf4;border:1px solid #ccc;display:inline-block;"></span>Green Tint
-                </span>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              {% for ff_val,ff_label,ff_stack in font_options %}
+              <label style="cursor:pointer;display:flex;align-items:center;gap:12px;
+                            padding:10px 14px;border-radius:10px;transition:all 0.15s;
+                            border:1px solid {% if settings_obj.font_family == ff_val %}var(--c-primary,#16a34a){% else %}#e2e8f0{% endif %};
+                            background:{% if settings_obj.font_family == ff_val %}#f0fdf4{% else %}#fff{% endif %};">
+                <input type="radio" name="font_family" value="{{ ff_val }}"
+                       {% if settings_obj.font_family == ff_val %}checked{% endif %}
+                       style="accent-color:var(--c-primary,#16a34a);">
+                <div>
+                  <div style="font-size:13px;font-weight:600;font-family:{{ ff_stack }};color:#1e293b;">{{ ff_label }}</div>
+                  <div style="font-size:11px;color:#94a3b8;font-family:{{ ff_stack }};">The quick brown fox jumps over the lazy dog</div>
+                </div>
               </label>
-              <label class="font-pill">
-                <input type="radio" name="background_style" value="light" {% if settings_obj.background_style == 'light' %}checked{% endif %}>
-                <span style="display:flex;align-items:center;gap:5px;">
-                  <span style="width:10px;height:10px;border-radius:50%;background:#f8fafc;border:1px solid #ccc;display:inline-block;"></span>Soft Grey
-                </span>
-              </label>
-              <label class="font-pill">
-                <input type="radio" name="background_style" value="white" {% if settings_obj.background_style == 'white' %}checked{% endif %}>
-                <span style="display:flex;align-items:center;gap:5px;">
-                  <span style="width:10px;height:10px;border-radius:50%;background:#ffffff;border:1px solid #ccc;display:inline-block;"></span>Pure White
-                </span>
-              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- ── Font Sizes ──────────────────────── -->
+          <div class="col-lg-6">
+            <label class="form-label" style="font-size:0.9rem;font-weight:700;">
+              <i class="fa fa-text-height me-2" style="color:var(--c-primary,#16a34a);"></i>Font Sizes
+            </label>
+
+            <div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:12px;">
+              <div style="font-size:0.8rem;font-weight:600;color:#334155;margin-bottom:10px;">
+                <i class="fa fa-user-shield me-1"></i> Admin Panel
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                {% for sz_val,sz_label in size_options %}
+                <label class="font-pill">
+                  <input type="radio" name="admin_font_size" value="{{ sz_val }}"
+                         {% if settings_obj.admin_font_size == sz_val %}checked{% endif %}>
+                  <span>{{ sz_label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+              <div style="font-size:0.73rem;color:#94a3b8;margin-top:8px;">
+                Preview: <span id="admin-preview">The quick brown fox</span>
+              </div>
+            </div>
+
+            <div style="background:#f8fafc;border-radius:12px;padding:16px;">
+              <div style="font-size:0.8rem;font-weight:600;color:#334155;margin-bottom:10px;">
+                <i class="fa fa-user-graduate me-1"></i> Student Portal
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                {% for sz_val,sz_label in size_options %}
+                <label class="font-pill">
+                  <input type="radio" name="student_font_size" value="{{ sz_val }}"
+                         {% if settings_obj.student_font_size == sz_val %}checked{% endif %}>
+                  <span>{{ sz_label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+              <div style="font-size:0.73rem;color:#94a3b8;margin-top:8px;">
+                Preview: <span id="student-preview">The quick brown fox</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Custom CSS ──────────────────────── -->
+          <div class="col-12">
+            <label class="form-label" style="font-size:0.9rem;font-weight:700;">
+              <i class="fa fa-code me-2" style="color:var(--c-primary,#16a34a);"></i>Custom CSS
+              <span style="font-size:11px;font-weight:400;color:#94a3b8;margin-left:8px;">Advanced — injected into every page</span>
+            </label>
+            <textarea name="custom_css" rows="5" class="form-control"
+                      style="font-family:monospace;font-size:12px;"
+                      placeholder="/* Your custom CSS here */&#10;.sidebar-brand { font-size: 1.4rem; }&#10;.btn-kura { border-radius: 4px; }">{{ settings_obj.custom_css }}</textarea>
+            <div style="font-size:0.73rem;color:#94a3b8;margin-top:4px;">
+              <i class="fa fa-exclamation-triangle me-1" style="color:#f59e0b;"></i>
+              Do not include &lt;script&gt; tags. Only CSS rules.
             </div>
           </div>
 
         </div>
-        <div class="mt-4">
+
+        <div class="mt-4 d-flex gap-2 align-items-center">
           <button type="submit" class="btn-kura">
             <i class="fa fa-paint-brush me-2"></i>Save Appearance
           </button>
+          <span style="font-size:12px;color:#94a3b8;">Changes take effect immediately on next page load</span>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- ── Admin Account ────────────────────────────────── -->
+  <!-- ══ Admin Account ═══════════════════════════════════ -->
   <div class="col-lg-6">
     <div class="form-card">
       <div class="section-title mb-1">Admin Account</div>
-      <div class="section-sub mb-4">Logged in as administrator</div>
+      <div class="section-sub mb-4">Current administrator session</div>
       <div class="d-flex align-items-center gap-3 mb-4"
            style="background:#f0fdf4;border-radius:12px;padding:16px;border:1px solid #bbf7d0;">
-        <div style="width:52px;height:52px;border-radius:50%;background:#16a34a;
-                    display:flex;align-items:center;justify-content:center;
-                    font-size:1.2rem;font-weight:700;color:#fff;font-family:'Sora',sans-serif;flex-shrink:0;">
+        <div style="width:52px;height:52px;border-radius:50%;background:var(--c-primary,#16a34a);
+                    display:flex;align-items:center;justify-content:center;font-size:1.2rem;
+                    font-weight:700;color:#fff;font-family:'Sora',sans-serif;flex-shrink:0;">
           {{ request.user.first_name|slice:":1"|upper }}{{ request.user.last_name|slice:":1"|upper }}
         </div>
         <div>
@@ -257,41 +340,36 @@
         <a href="{% url 'admin_setup_otp' %}" class="btn-kura-outline">
           <i class="fa fa-qrcode me-1"></i>Reset 2FA Device
         </a>
-        <button onclick="location.href='?retour=1'" class="btn-kura-outline">
-          <i class="fa fa-route me-1"></i>Replay Tour
-        </button>
       </div>
     </div>
   </div>
 
-  <!-- ── Audit & Tiebreak ──────────────────────────────── -->
+  <!-- ══ Audit & Records ═════════════════════════════════ -->
   <div class="col-lg-6">
     <div class="form-card">
       <div class="section-title mb-1">Audit & Records</div>
-      <div class="section-sub mb-4">View tiebreak decisions and security audit logs</div>
+      <div class="section-sub mb-4">Transparency logs and system tools</div>
       <div class="d-flex flex-column gap-3">
         <a href="{% url 'admin_tiebreak_log' %}"
            style="display:flex;align-items:center;gap:12px;background:#f0fdf4;
                   border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;
                   text-decoration:none;color:#166534;transition:background 0.15s;"
-           onmouseover="this.style.background='#dcfce7'"
-           onmouseout="this.style.background='#f0fdf4'">
+           onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">
           <i class="fa fa-balance-scale fa-lg"></i>
           <div>
             <div style="font-weight:600;font-size:13px;">Tiebreak Log</div>
-            <div style="font-size:11px;color:#64748b;">Full audit trail of all tie-resolution decisions</div>
+            <div style="font-size:11px;color:#64748b;">Auditable trail of all tie-resolution decisions</div>
           </div>
         </a>
         <a href="{% url 'admin_audit_log' %}"
            style="display:flex;align-items:center;gap:12px;background:#f0fdf4;
                   border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px;
                   text-decoration:none;color:#166534;transition:background 0.15s;"
-           onmouseover="this.style.background='#dcfce7'"
-           onmouseout="this.style.background='#f0fdf4'">
+           onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">
           <i class="fa fa-shield-alt fa-lg"></i>
           <div>
             <div style="font-weight:600;font-size:13px;">Security Audit Log</div>
-            <div style="font-size:11px;color:#64748b;">All admin actions are recorded here</div>
+            <div style="font-size:11px;color:#64748b;">All admin actions recorded here</div>
           </div>
         </a>
         <a href="/admin/"
@@ -300,7 +378,7 @@
           <i class="fa fa-tools fa-lg"></i>
           <div>
             <div style="font-weight:600;font-size:13px;">Django Admin Panel</div>
-            <div style="font-size:11px;color:rgba(255,255,255,0.6);">Advanced database management and permissions</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.6);">Database management and permissions</div>
           </div>
         </a>
       </div>
@@ -312,53 +390,63 @@
 
 {% block extra_css %}
 <style>
-.font-pill {
-  cursor: pointer;
-  margin: 0;
-}
-.font-pill input[type="radio"] {
-  display: none;
-}
+.font-pill { cursor:pointer; margin:0; }
+.font-pill input[type="radio"] { display:none; }
 .font-pill span {
-  display: inline-block;
-  padding: 6px 16px;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  border: 1px solid #bbf7d0;
-  cursor: pointer;
-  transition: all 0.15s;
-  background: #fff;
-  color: #166534;
-  user-select: none;
+  display:inline-block; padding:6px 16px; border-radius:8px; font-size:0.8rem;
+  border:1px solid #e2e8f0; cursor:pointer; transition:all 0.15s;
+  background:#fff; color:#334155; user-select:none;
 }
 .font-pill input[type="radio"]:checked + span {
-  background: #16a34a;
-  color: #fff;
-  border-color: #16a34a;
+  background:var(--c-primary,#16a34a); color:#fff;
+  border-color:var(--c-primary,#16a34a);
 }
+.theme-card:hover .theme-preview { transform:scale(1.04); }
 </style>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const sizeMap = { sm: '12px', md: '14px', lg: '16px', xl: '19px' };
-
+const sizeMap = { sm:'12px', md:'14px', lg:'16px', xl:'19px' };
 function getChecked(name) {
   const el = document.querySelector(`input[name="${name}"]:checked`);
   return el ? el.value : 'md';
 }
-
 function updatePreviews() {
-  const ap = document.getElementById('admin-font-preview');
-  const sp = document.getElementById('student-font-preview');
+  const ap = document.getElementById('admin-preview');
+  const sp = document.getElementById('student-preview');
   if (ap) ap.style.fontSize = sizeMap[getChecked('admin_font_size')] || '14px';
   if (sp) sp.style.fontSize = sizeMap[getChecked('student_font_size')] || '14px';
 }
-
 document.querySelectorAll('#appearance-form input[type="radio"]').forEach(r => {
-  r.addEventListener('change', updatePreviews);
+  r.addEventListener('change', function() {
+    updatePreviews();
+    // Show/hide custom colours section
+    if (this.name === 'theme') {
+      document.getElementById('custom-colors-section').style.display =
+        this.value === 'custom' ? 'block' : 'none';
+    }
+  });
 });
-
 updatePreviews();
+
+// Sync colour picker ↔ hex input
+function syncColor(fieldName, hexId, val) {
+  if (/^#[0-9a-fA-F]{6}$/.test(val)) {
+    document.querySelector(`input[name="${fieldName}"]`).value = val;
+  }
+}
+// Sync hex input when colour picker changes
+document.querySelectorAll('input[type="color"]').forEach(picker => {
+  picker.addEventListener('input', function() {
+    const hexId = this.name.replace('_color','') + '-hex'
+                            .replace('primary','primary')
+                            .replace('sidebar','sidebar')
+                            .replace('accent','accent');
+    const map = {primary_color:'primary-hex', sidebar_color:'sidebar-hex', accent_color:'accent-hex'};
+    const el = document.getElementById(map[this.name]);
+    if (el) el.value = this.value;
+  });
+});
 </script>
 {% endblock %}

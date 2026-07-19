@@ -106,38 +106,37 @@ class Admin(models.Model):
 
 
 class Election(models.Model):
-    STATUS_ACTIVE = 'active'
+    STATUS_ACTIVE   = 'active'
     STATUS_INACTIVE = 'inactive'
-    STATUS_CLOSED = 'closed'
+    STATUS_CLOSED   = 'closed'
+    STATUS_RERUN    = 'rerun'   # tie-rerun in progress for selected positions
+
     announcement = models.TextField(
-        blank=True,
-        null=True,
+        blank=True, null=True,
         help_text='Optional message shown to students on their dashboard'
     )
 
     STATUS_CHOICES = [
-        (STATUS_ACTIVE, 'Active'),
+        (STATUS_ACTIVE,   'Active'),
         (STATUS_INACTIVE, 'Inactive'),
-        (STATUS_CLOSED, 'Closed'),
+        (STATUS_CLOSED,   'Closed'),
+        (STATUS_RERUN,    'Re-run (Tie Resolution)'),
     ]
 
     election_name = models.CharField(max_length=200)
-    start_date = models.DateTimeField()
-    end_date = models.DateTimeField()
-    status = models.CharField(
+    start_date    = models.DateTimeField()
+    end_date      = models.DateTimeField()
+    status        = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default=STATUS_INACTIVE)
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at    = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = 'elections'
         verbose_name = 'Election'
         verbose_name_plural = 'Elections'
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['status']),
-        ]
+        indexes = [models.Index(fields=['status'])]
 
-        # helper properties
     @property
     def is_active(self):
         return self.status == self.STATUS_ACTIVE
@@ -145,6 +144,10 @@ class Election(models.Model):
     @property
     def is_closed(self):
         return self.status == self.STATUS_CLOSED
+
+    @property
+    def is_rerun(self):
+        return self.status == self.STATUS_RERUN
 
     @property
     def total_votes(self):
@@ -156,14 +159,14 @@ class Election(models.Model):
 
 class Position(models.Model):
 
-    # lets define FKs to election
     election = models.ForeignKey(
         Election, on_delete=models.CASCADE, related_name='positions')
 
     position_name = models.CharField(max_length=100)
-    # max votes allowed for this position
-    max_votes = models.PositiveIntegerField(default=1)
-    created_at = models.DateTimeField(default=timezone.now)
+    max_votes     = models.PositiveIntegerField(default=1)
+    # True when this position has been flagged for a re-run due to a tie
+    is_rerun      = models.BooleanField(default=False)
+    created_at    = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = 'positions'
@@ -306,14 +309,29 @@ class Vote(models.Model):
 
 class SystemSettings(models.Model):
     """Single-row settings table for the institution."""
-    system_name = models.CharField(max_length=100, default='KuraVote')
+
+    # ── Identity ──────────────────────────────────────────
+    system_name      = models.CharField(max_length=100, default='KuraVote')
     institution_name = models.CharField(max_length=200, default='')
-    two_fa_enabled = models.BooleanField(default=True)
-    # Font size preference: 'sm', 'md', 'lg', 'xl'
-    admin_font_size = models.CharField(max_length=5, default='md')
+
+    # ── Security ──────────────────────────────────────────
+    two_fa_enabled   = models.BooleanField(default=True)
+
+    # ── Appearance / Theme ────────────────────────────────
+    # theme: 'green' | 'blue' | 'purple' | 'dark' | 'custom'
+    theme            = models.CharField(max_length=20, default='green')
+    # font_family: 'dmsans' | 'inter' | 'poppins' | 'roboto' | 'system'
+    font_family      = models.CharField(max_length=20, default='dmsans')
+    # font sizes for admin and student panels
+    admin_font_size   = models.CharField(max_length=5, default='md')
     student_font_size = models.CharField(max_length=5, default='md')
-    # Background style: 'default', 'light', 'white'
-    background_style = models.CharField(max_length=10, default='default')
+    # custom theme colours (used when theme='custom')
+    primary_color    = models.CharField(max_length=7, default='#16a34a')
+    sidebar_color    = models.CharField(max_length=7, default='#14532d')
+    accent_color     = models.CharField(max_length=7, default='#eab308')
+    # extra CSS injected into every page (power-user customisation)
+    custom_css       = models.TextField(blank=True, default='')
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

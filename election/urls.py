@@ -256,4 +256,19 @@ urlpatterns = [
         views.admin_tiebreak_log,
         name='admin_tiebreak_log'
     ),
+    path(
+        'admin-panel/elections/<int:election_id>/detect-ties/',
+        views.admin_detect_ties,
+        name='admin_detect_ties'
+    ),
+    path(
+        'admin-panel/elections/<int:election_id>/start-rerun/',
+        views.admin_start_rerun,
+        name='admin_start_rerun'
+    ),
+    path(
+        'admin-panel/elections/<int:election_id>/close-rerun/',
+        views.admin_close_rerun,
+        name='admin_close_rerun'
+    ),
 ]
