@@ -6,15 +6,16 @@
 
 {% block admin_content %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <p style="color:#94a3b8; font-size:0.82rem; margin:0;">
-    Register and manage candidates for each position.
-  </p>
+<div class="action-bar">
+  <div>
+    <div class="section-title">Candidates</div>
+    <div class="section-sub">All registered candidates</div>
+  </div>
   <a href="{% url 'admin_candidate_create' %}"
-     class="btn btn-primary"
-     style="background:#16a34a; border-color:#16a34a;
-            border-radius:10px; font-size:0.85rem; padding:8px 18px;">
-    <i class="fa fa-user-plus me-2"></i>Register Candidate
+     class="btn-kura"
+     style="color:#fff !important; text-decoration:none;">
+    <i class="fa fa-user-plus me-1"></i>
+    Register Candidate
   </a>
 </div>
 

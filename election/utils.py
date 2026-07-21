@@ -182,3 +182,79 @@ def create_bulk_notifications(students, title,
         )
         for s in students
     ], batch_size=500)
+
+
+def detect_and_log_ties(election):
+    """
+    Run after election closes.
+    Finds all positions with tied top vote counts.
+    Creates TieResolution records for each.
+    Returns list of TieResolution objects created.
+    """
+    from .models import Position, Vote, Candidate, TieResolution
+
+    positions = Position.objects.filter(election=election)
+    new_ties = []
+
+    for position in positions:
+        pos_total = Vote.objects.filter(position=position).count()
+        if pos_total == 0:
+            continue
+
+        candidates = list(
+            Candidate.objects.filter(
+                position=position
+            ).select_related('student')
+        )
+
+        if not candidates:
+            continue
+
+        # Sort by actual vote count — NOT by registration order
+        candidates_with_votes = sorted(
+            [(c, Vote.objects.filter(candidate=c).count())
+             for c in candidates],
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        top_votes = candidates_with_votes[0][1]
+        if top_votes == 0:
+            continue
+
+        # Find all candidates with top vote count
+        tied = [
+            c for c, votes in candidates_with_votes
+            if votes == top_votes
+        ]
+
+        if len(tied) <= 1:
+            continue  # Clear winner — no tie
+
+        # Create or update tie resolution record
+        tie_obj, created = TieResolution.objects.get_or_create(
+            position=position,
+            defaults={
+                'election':        election,
+                'tied_vote_count': top_votes,
+                'status':          TieResolution.STATUS_PENDING,
+            }
+        )
+        if created:
+            tie_obj.tied_candidates.set(tied)
+            tie_obj.save()
+            new_ties.append(tie_obj)
+
+            # Notify admins
+            create_admin_notification(
+                title=f'Vote Tie Detected — {position.position_name}',
+                message=(
+                    f'{len(tied)} candidates are tied at {top_votes} votes '
+                    f'each in {position.position_name} for '
+                    f'"{election.election_name}". '
+                    f'A rerun election is required.'
+                ),
+                notif_type='warning',
+            )
+
+    return new_ties

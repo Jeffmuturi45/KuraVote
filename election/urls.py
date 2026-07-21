@@ -267,6 +267,16 @@ urlpatterns = [
         name='admin_start_rerun'
     ),
     path(
+        'admin-panel/tie/<int:tie_id>/rerun/',
+        views.create_rerun_election,
+        name='create_rerun_election'
+    ),
+    path(
+        'admin-panel/positions/<int:position_id>/ensure-tie/',
+        views.ensure_tie_resolution,
+        name='ensure_tie_resolution'
+    ),
+    path(
         'admin-panel/elections/<int:election_id>/close-rerun/',
         views.admin_close_rerun,
         name='admin_close_rerun'

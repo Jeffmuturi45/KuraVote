@@ -22,15 +22,13 @@
     {% if election.status == 'closed' and election.total_votes > 0 %}
       <a href="{% url 'export_pdf' election.id %}"
          class="btn-kura"
-         style="background:#dc2626;">
-        <i class="fa fa-file-pdf"></i>
-        Export PDF
+         style="background:#dc2626; color:#fff !important;">
+        <i class="fa fa-file-pdf"></i> Export PDF
       </a>
       <a href="{% url 'export_excel' election.id %}"
          class="btn-kura"
-         style="background:#166534;">
-        <i class="fa fa-file-excel"></i>
-        Export Excel
+         style="background:#166534; color:#fff !important;">
+        <i class="fa fa-file-excel"></i> Export Excel
       </a>
     {% else %}
       <div style="font-size:12px; color:#94a3b8; align-self:center;
@@ -61,9 +59,7 @@
         <i class="fa fa-chart-pie" style="color:#16a34a;"></i>
         Voter Turnout
       </div>
-      <div class="stat-value" style="color:#16a34a;">
-        {{ turnout }}%
-      </div>
+      <div class="stat-value" style="color:#16a34a;">{{ turnout }}%</div>
       <div style="height:5px; background:#d1fae5; border-radius:3px;
                   margin-top:8px; overflow:hidden;">
         <div style="height:100%; background:#16a34a;
@@ -90,8 +86,7 @@
     <!-- Position header -->
     <div style="background:#14532d; padding:16px 20px;
                 display:flex; align-items:center;
-                justify-content:space-between; flex-wrap:wrap;
-                gap:12px;">
+                justify-content:space-between; flex-wrap:wrap; gap:12px;">
       <div>
         <div style="font-family:'Sora',sans-serif; font-weight:700;
                     color:#fff; font-size:15px;">
@@ -104,36 +99,111 @@
         </div>
       </div>
 
-      {% if result.winner %}
-        <div style="display:flex; align-items:center; gap:10px;
-                    background:rgba(255,255,255,0.1);
-                    border-radius:10px; padding:10px 16px;">
-          <i class="fa fa-trophy" style="color:#eab308; font-size:1.1rem;"></i>
+      <!-- Winner or tie badge -->
+      {% if result.is_tie %}
+        <div style="display:flex; align-items:center; gap:8px;
+                    background:rgba(234,179,8,0.2);
+                    border:1px solid rgba(234,179,8,0.4);
+                    border-radius:10px; padding:8px 14px;">
+          <i class="fa fa-exclamation-triangle"
+             style="color:#eab308;"></i>
           <div>
             <div style="font-size:10px; color:rgba(255,255,255,0.6);
                         text-transform:uppercase; letter-spacing:0.5px;">
-              {% if result.is_tied %}Tiebreak Winner{% else %}Winner{% endif %}
+              Vote Tie
             </div>
+            <div style="font-size:13px; font-weight:700; color:#eab308;">
+              {{ result.tied_candidates|length }} candidates tied
+              at {{ result.tied_candidates.0.vote_count }} votes
+            </div>
+          </div>
+        </div>
+      {% elif result.winner %}
+        <div style="display:flex; align-items:center; gap:10px;
+                    background:rgba(255,255,255,0.1);
+                    border-radius:10px; padding:10px 16px;">
+          <i class="fa fa-trophy" style="color:#eab308;
+             font-size:1.1rem;"></i>
+          <div>
+            <div style="font-size:10px;
+                        color:rgba(255,255,255,0.6);
+                        text-transform:uppercase;
+                        letter-spacing:0.5px;">Winner</div>
             <div style="font-size:14px; font-weight:700; color:#fff;">
               {{ result.winner.student.get_full_name }}
             </div>
-            {% if result.is_tied %}
-              <div style="font-size:10px; color:#fde68a; margin-top:2px;">
-                <i class="fa fa-balance-scale me-1"></i>
-                Tied with {{ result.tiebreak_info.tied_names }} — resolved by earliest vote
-              </div>
-            {% endif %}
           </div>
         </div>
       {% else %}
         <div style="font-size:11px; color:rgba(255,255,255,0.4);
                     background:rgba(255,255,255,0.06);
                     border-radius:8px; padding:8px 14px;">
-          <i class="fa fa-clock me-1"></i>
-          No votes cast yet
+          <i class="fa fa-clock me-1"></i>No votes cast yet
         </div>
       {% endif %}
     </div>
+
+    <!-- Tie alert bar -->
+    {% if result.is_tie %}
+      <div style="background:#fefce8; border-bottom:1px solid #fde68a;
+                  padding:14px 20px;">
+        <div style="display:flex; align-items:flex-start;
+                    justify-content:space-between; flex-wrap:wrap;
+                    gap:12px;">
+          <div>
+            <div style="font-size:13px; font-weight:700;
+                        color:#854d0e; margin-bottom:4px;">
+              <i class="fa fa-exclamation-triangle me-1"></i>
+              Tie Detected — Rerun Required
+            </div>
+            <div style="font-size:12px; color:#854d0e; margin-bottom:4px;">
+              Tied candidates:
+              {% for c in result.tied_candidates %}
+                <strong>{{ c.student.get_full_name }}</strong>
+                {% if not forloop.last %} vs {% endif %}
+              {% endfor %}
+              — each with <strong>{{ result.tied_candidates.0.vote_count }}</strong> votes.
+            </div>
+            {% if result.tie_resolution %}
+              {% if result.tie_resolution.status == 'rerun' %}
+                <div style="font-size:12px; color:#16a34a; font-weight:500;">
+                  <i class="fa fa-check-circle me-1"></i>
+                  Rerun election created:
+                  "{{ result.tie_resolution.rerun_election.election_name }}"
+                </div>
+              {% endif %}
+            {% else %}
+              <div style="font-size:11px; color:#94a3b8;">
+                No action taken yet. Schedule a rerun to resolve this tie.
+              </div>
+            {% endif %}
+          </div>
+
+           {% if not result.tie_resolution or result.tie_resolution.status == 'pending' %}
+            {% if not result.tie_resolution or result.tie_resolution.status == 'pending' %}
+  <button type="button"
+          onclick="scheduleRerun(
+            {{ result.tie_resolution.id|default:'null' }},
+            '{{ result.position.position_name|escapejs }}',
+            {{ result.position.id }})"
+          style="background:#eab308; color:#1a1a1a; border:none;
+                 border-radius:9px; padding:9px 16px;
+                 font-size:13px; font-weight:600;
+                 cursor:pointer; white-space:nowrap;
+                 display:flex; align-items:center; gap:6px;">
+    <i class="fa fa-redo"></i>
+    Schedule Rerun
+  </button>
+{% endif %}
+          <a href="{% url 'admin_detect_ties' election.id %}"
+   class="btn-kura"
+   style="background:#eab308;color:#1a1a1a;">
+    <i class="fa fa-balance-scale me-1"></i>
+    Manage Tie
+</a>
+        </div>
+      </div>
+    {% endif %}
 
     <!-- Candidates table -->
     <table class="table table-hover mb-0">
@@ -144,22 +214,33 @@
           <th style="width:130px;">Admission No</th>
           <th style="width:100px;">Votes</th>
           <th style="width:100px;">Percentage</th>
-          <th style="width:200px;">Vote Share</th>
+          <th style="width:180px;">Vote Share</th>
         </tr>
       </thead>
       <tbody>
         {% for candidate in result.candidates %}
-          <tr style="{% if forloop.first and result.winner %}
+          {% with vote_count=candidate.vote_count %}
+          <tr style="{% if result.is_tie and candidate in result.tied_candidates %}
+                     background:#fefce8;
+                     {% elif forloop.first and result.winner %}
                      background:#f0fdf4;{% endif %}">
 
             <!-- Rank -->
             <td class="text-center">
-              {% if forloop.first and result.winner %}
+              {% if result.is_tie and candidate in result.tied_candidates %}
                 <span style="background:#eab308; color:#1a1a1a;
-                             width:28px; height:28px;
-                             border-radius:50%; display:inline-flex;
-                             align-items:center; justify-content:center;
-                             font-size:12px; font-weight:700;">
+                             width:28px; height:28px; border-radius:50%;
+                             display:inline-flex; align-items:center;
+                             justify-content:center; font-size:11px;
+                             font-weight:700;">
+                  =
+                </span>
+              {% elif forloop.first and result.winner %}
+                <span style="background:#eab308; color:#1a1a1a;
+                             width:28px; height:28px; border-radius:50%;
+                             display:inline-flex; align-items:center;
+                             justify-content:center; font-size:12px;
+                             font-weight:700;">
                   1
                 </span>
               {% else %}
@@ -170,17 +251,16 @@
               {% endif %}
             </td>
 
-            <!-- Candidate -->
+            <!-- Candidate info -->
             <td>
               <div class="d-flex align-items-center gap-3">
                 {% if candidate.has_photo %}
                   <img src="{{ candidate.photo.url }}"
-                       style="width:38px; height:38px;
-                              border-radius:8px; object-fit:cover;
-                              flex-shrink:0;">
+                       style="width:38px; height:38px; border-radius:8px;
+                              object-fit:cover; flex-shrink:0;">
                 {% else %}
-                  <div style="width:38px; height:38px;
-                              border-radius:8px; flex-shrink:0;
+                  <div style="width:38px; height:38px; border-radius:8px;
+                              flex-shrink:0;
                               background:{{ candidate.get_avatar_color }};
                               display:flex; align-items:center;
                               justify-content:center; color:#fff;
@@ -195,8 +275,13 @@
                     {{ candidate.student.get_full_name }}
                     {% if forloop.first and result.winner %}
                       <i class="fa fa-trophy ms-1"
-                         style="color:#eab308;
-                                font-size:11px;"></i>
+                         style="color:#eab308; font-size:11px;"></i>
+                    {% endif %}
+                    {% if result.is_tie and candidate in result.tied_candidates %}
+                      <span style="font-size:10px; background:#fefce8;
+                                   color:#854d0e; padding:1px 6px;
+                                   border-radius:6px; margin-left:4px;
+                                   font-weight:600;">TIED</span>
                     {% endif %}
                   </div>
                   <div style="font-size:11px; color:#94a3b8;">
@@ -206,37 +291,36 @@
               </div>
             </td>
 
-            <!-- Admission No -->
             <td style="font-size:13px; color:#64748b;">
               {{ candidate.student.admission_number }}
             </td>
 
-            <!-- Votes -->
             <td style="font-size:16px; font-weight:700;
-                       color:#166534;">
-              {{ candidate.vote_count }}
+                       color:{% if result.is_tie and candidate in result.tied_candidates %}
+                       #854d0e{% else %}#166534{% endif %};">
+              {{ vote_count }}
             </td>
 
-            <!-- Percentage -->
-            <td style="font-size:13px; font-weight:600;
-                       color:#166534;">
+            <td style="font-size:13px; font-weight:600; color:#166534;">
               {{ candidate.vote_percentage }}%
             </td>
 
-            <!-- Bar -->
             <td>
               <div style="background:#f0fdf4; border-radius:4px;
                           height:14px; overflow:hidden;">
                 <div style="height:100%; border-radius:4px;
-                            background:{% if forloop.first and result.winner %}
-                            #16a34a{% else %}
+                            background:{% if result.is_tie and candidate in result.tied_candidates %}
+                            #eab308
+                            {% elif forloop.first and result.winner %}
+                            #16a34a
+                            {% else %}
                             {{ candidate.get_avatar_color }}{% endif %};
-                            width:{{ candidate.vote_percentage }}%;
-                            transition:width 0.5s;"></div>
+                            width:{{ candidate.vote_percentage }}%;"></div>
               </div>
             </td>
 
           </tr>
+          {% endwith %}
         {% empty %}
           <tr>
             <td colspan="6" class="text-center py-4"
@@ -251,4 +335,172 @@
   </div>
 {% endfor %}
 
+<!-- ══ Rerun Modal ══════════════════════════════════════ -->
+<div id="rerun-modal"
+     style="display:none; position:fixed; inset:0;
+            background:rgba(0,0,0,0.5); z-index:500;
+            align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:16px; padding:0;
+              max-width:500px; width:90%; overflow:hidden;
+              box-shadow:0 20px 60px rgba(0,0,0,0.2);">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#854d0e,#eab308);
+                padding:20px 24px; display:flex;
+                align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-family:'Sora',sans-serif; font-size:1rem;
+                    font-weight:700; color:#fff;">
+          <i class="fa fa-redo me-2"></i>Schedule Rerun Election
+        </div>
+        <div style="font-size:12px; color:rgba(255,255,255,0.7);
+                    margin-top:2px;" id="rerun-position-subtitle">
+        </div>
+      </div>
+      <button onclick="closeRerunModal()"
+              style="background:rgba(255,255,255,0.15); border:none;
+                     color:#fff; width:32px; height:32px;
+                     border-radius:50%; cursor:pointer; font-size:14px;
+                     display:flex; align-items:center;
+                     justify-content:center;">
+        <i class="fa fa-times"></i>
+      </button>
+    </div>
+
+     <!-- Body -->
+    <form method="POST" id="rerun-form" action="" style="padding:24px;">
+      {% csrf_token %}
+
+      <!-- Info box -->
+      <div style="background:#fefce8; border:1px solid #fde68a;
+                  border-radius:10px; padding:12px 14px;
+                  margin-bottom:20px; font-size:12px; color:#854d0e;
+                  display:flex; align-items:flex-start; gap:8px;">
+        <i class="fa fa-info-circle"
+           style="margin-top:1px; flex-shrink:0;"></i>
+        <span>
+          A new election will be created containing only this
+          tied position with only the tied candidates on the ballot.
+          All registered students will be eligible to vote.
+        </span>
+      </div>
+
+      <div class="mb-3">
+        <label style="font-size:12px; font-weight:500; color:#374151;
+                      display:block; margin-bottom:6px;">
+          Rerun Start Date & Time
+          <span style="color:#dc2626;">*</span>
+        </label>
+        <input type="datetime-local"
+               name="start_date"
+               required
+               style="width:100%; padding:9px 12px;
+                      border:1px solid #d1fae5; border-radius:9px;
+                      font-size:13px; font-family:'DM Sans',sans-serif;
+                      outline:none;"
+               onfocus="this.style.borderColor='#eab308'"
+               onblur="this.style.borderColor='#d1fae5'">
+      </div>
+
+      <div class="mb-3">
+        <label style="font-size:12px; font-weight:500; color:#374151;
+                      display:block; margin-bottom:6px;">
+          Rerun End Date & Time
+          <span style="color:#dc2626;">*</span>
+        </label>
+        <input type="datetime-local"
+               name="end_date"
+               required
+               style="width:100%; padding:9px 12px;
+                      border:1px solid #d1fae5; border-radius:9px;
+                      font-size:13px; font-family:'DM Sans',sans-serif;
+                      outline:none;"
+               onfocus="this.style.borderColor='#eab308'"
+               onblur="this.style.borderColor='#d1fae5'">
+      </div>
+
+      <div class="mb-4">
+        <label style="font-size:12px; font-weight:500; color:#374151;
+                      display:block; margin-bottom:6px;">
+          Admin Notes (optional)
+        </label>
+        <textarea name="notes"
+                  rows="2"
+                  placeholder="e.g. Rerun due to 3-way tie at 42 votes each..."
+                  style="width:100%; padding:9px 12px;
+                         border:1px solid #d1fae5; border-radius:9px;
+                         font-size:13px; font-family:'DM Sans',sans-serif;
+                         outline:none; resize:none;"></textarea>
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <button type="submit"
+                style="flex:1; background:#eab308; color:#1a1a1a;
+                       border:none; border-radius:10px; padding:11px;
+                       font-family:'Sora',sans-serif; font-size:0.9rem;
+                       font-weight:700; cursor:pointer;">
+          <i class="fa fa-redo me-1"></i>
+          Create Rerun Election
+        </button>
+        <button type="button"
+                onclick="closeRerunModal()"
+                class="btn-kura-outline"
+                style="padding:11px 20px;">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function scheduleRerun(tieId, posName, posId) {
+  if (tieId && tieId !== 'None' && tieId !== null) {
+    // Tie record already exists — open modal directly
+    openRerunModal(tieId, posName);
+  } else {
+    // Create the tie record first then open modal
+    fetch('/admin-panel/positions/' + posId + '/ensure-tie/', {
+      method: 'GET',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.tie_id) {
+          openRerunModal(data.tie_id, posName);
+        } else {
+          alert('Could not create tie record: ' + (data.error || 'Unknown error'));
+        }
+      })
+      .catch(err => {
+        alert('Network error. Please try again.');
+        console.error(err);
+      });
+  }
+}
+
+function openRerunModal(tieId, posName) {
+  document.getElementById('rerun-position-subtitle').textContent =
+    'Position: ' + posName;
+  document.getElementById('rerun-form').action =
+    '/admin-panel/tie/' + tieId + '/rerun/';
+  document.getElementById('rerun-modal').style.display = 'flex';
+}
+
+function closeRerunModal() {
+  document.getElementById('rerun-modal').style.display = 'none';
+}
+
+document.getElementById('rerun-modal')
+  .addEventListener('click', function(e) {
+    if (e.target === this) closeRerunModal();
+  });
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeRerunModal();
+});
+</script>
 {% endblock %}
