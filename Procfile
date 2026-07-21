@@ -1,0 +1,1 @@
+web: gunicorn kuravote.wsgi:application --config gunicorn.conf.py
