@@ -41,6 +41,27 @@ urlpatterns = [
         name='notifications_api'
     ),
     path(
+        'notifications/mark-read/',
+        views.mark_notifications_read,
+        name='mark_notifications_read'
+    ),
+    # ── Web Push ──────────────────────────────────────────
+    path(
+        'push/vapid-public-key/',
+        views.push_vapid_public_key,
+        name='push_vapid_public_key'
+    ),
+    path(
+        'push/subscribe/',
+        views.push_subscribe,
+        name='push_subscribe'
+    ),
+    path(
+        'push/unsubscribe/',
+        views.push_unsubscribe,
+        name='push_unsubscribe'
+    ),
+    path(
         'logout/',
         views.logout_view,
         name='logout'
@@ -265,16 +286,6 @@ urlpatterns = [
         'admin-panel/elections/<int:election_id>/start-rerun/',
         views.admin_start_rerun,
         name='admin_start_rerun'
-    ),
-    path(
-        'admin-panel/tie/<int:tie_id>/rerun/',
-        views.create_rerun_election,
-        name='create_rerun_election'
-    ),
-    path(
-        'admin-panel/positions/<int:position_id>/ensure-tie/',
-        views.ensure_tie_resolution,
-        name='ensure_tie_resolution'
     ),
     path(
         'admin-panel/elections/<int:election_id>/close-rerun/',

@@ -106,10 +106,10 @@ class Admin(models.Model):
 
 
 class Election(models.Model):
-    STATUS_ACTIVE = 'active'
+    STATUS_ACTIVE   = 'active'
     STATUS_INACTIVE = 'inactive'
-    STATUS_CLOSED = 'closed'
-    STATUS_RERUN = 'rerun'   # tie-rerun in progress for selected positions
+    STATUS_CLOSED   = 'closed'
+    STATUS_RERUN    = 'rerun'   # tie-rerun in progress for selected positions
 
     announcement = models.TextField(
         blank=True, null=True,
@@ -124,11 +124,11 @@ class Election(models.Model):
     ]
 
     election_name = models.CharField(max_length=200)
-    start_date = models.DateTimeField()
-    end_date = models.DateTimeField()
-    status = models.CharField(
+    start_date    = models.DateTimeField()
+    end_date      = models.DateTimeField()
+    status        = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default=STATUS_INACTIVE)
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at    = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = 'elections'
@@ -163,10 +163,10 @@ class Position(models.Model):
         Election, on_delete=models.CASCADE, related_name='positions')
 
     position_name = models.CharField(max_length=100)
-    max_votes = models.PositiveIntegerField(default=1)
+    max_votes     = models.PositiveIntegerField(default=1)
     # True when this position has been flagged for a re-run due to a tie
-    is_rerun = models.BooleanField(default=False)
-    created_at = models.DateTimeField(default=timezone.now)
+    is_rerun      = models.BooleanField(default=False)
+    created_at    = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = 'positions'
@@ -311,26 +311,26 @@ class SystemSettings(models.Model):
     """Single-row settings table for the institution."""
 
     # ── Identity ──────────────────────────────────────────
-    system_name = models.CharField(max_length=100, default='KuraVote')
+    system_name      = models.CharField(max_length=100, default='KuraVote')
     institution_name = models.CharField(max_length=200, default='')
 
     # ── Security ──────────────────────────────────────────
-    two_fa_enabled = models.BooleanField(default=True)
+    two_fa_enabled   = models.BooleanField(default=True)
 
     # ── Appearance / Theme ────────────────────────────────
     # theme: 'green' | 'blue' | 'purple' | 'dark' | 'custom'
-    theme = models.CharField(max_length=20, default='green')
+    theme            = models.CharField(max_length=20, default='green')
     # font_family: 'dmsans' | 'inter' | 'poppins' | 'roboto' | 'system'
-    font_family = models.CharField(max_length=20, default='dmsans')
+    font_family      = models.CharField(max_length=20, default='dmsans')
     # font sizes for admin and student panels
-    admin_font_size = models.CharField(max_length=5, default='md')
+    admin_font_size   = models.CharField(max_length=5, default='md')
     student_font_size = models.CharField(max_length=5, default='md')
     # custom theme colours (used when theme='custom')
-    primary_color = models.CharField(max_length=7, default='#16a34a')
-    sidebar_color = models.CharField(max_length=7, default='#14532d')
-    accent_color = models.CharField(max_length=7, default='#eab308')
+    primary_color    = models.CharField(max_length=7, default='#16a34a')
+    sidebar_color    = models.CharField(max_length=7, default='#14532d')
+    accent_color     = models.CharField(max_length=7, default='#eab308')
     # extra CSS injected into every page (power-user customisation)
-    custom_css = models.TextField(blank=True, default='')
+    custom_css       = models.TextField(blank=True, default='')
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -370,65 +370,22 @@ class TiebreakLog(models.Model):
         return f'Tiebreak: {self.position} → {self.winner_name}'
 
 
-class TieResolution(models.Model):
-
-    STATUS_PENDING = 'pending'
-    STATUS_RERUN = 'rerun'
-    STATUS_RESOLVED = 'resolved'
-
-    STATUS_CHOICES = [
-        (STATUS_PENDING,  'Pending — Awaiting Admin Decision'),
-        (STATUS_RERUN,    'Rerun Election Scheduled'),
-        (STATUS_RESOLVED, 'Resolved'),
-    ]
-
-    position = models.OneToOneField(
-        'Position',
-        on_delete=models.CASCADE,
-        related_name='tie_resolution'
+class PushSubscription(models.Model):
+    """Stores a browser Web Push subscription endpoint per student."""
+    student   = models.ForeignKey(
+        Student, on_delete=models.CASCADE,
+        related_name='push_subscriptions'
     )
-    election = models.ForeignKey(
-        'Election',
-        on_delete=models.CASCADE,
-        related_name='tie_resolutions'
-    )
-    tied_vote_count = models.PositiveIntegerField(default=0)
-    tied_candidates = models.ManyToManyField(
-        'Candidate',
-        related_name='tie_resolutions',
-        blank=True
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default=STATUS_PENDING
-    )
-    rerun_election = models.ForeignKey(
-        'Election',
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='rerun_for'
-    )
-    admin_notes = models.TextField(blank=True)
-    detected_at = models.DateTimeField(default=timezone.now)
-    resolved_at = models.DateTimeField(null=True, blank=True)
+    endpoint  = models.TextField(unique=True)
+    p256dh    = models.TextField()   # browser public key
+    auth      = models.TextField()   # auth secret
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        db_table = 'tie_resolutions'
-        ordering = ['-detected_at']
+        db_table = 'push_subscriptions'
 
     def __str__(self):
-        return (
-            f'Tie — {self.position.position_name} '
-            f'({self.tied_vote_count} votes each)'
-        )
-
-    @property
-    def tied_candidate_names(self):
-        return ', '.join([
-            c.student.get_full_name()
-            for c in self.tied_candidates.select_related('student').all()
-        ])
+        return f'Push sub — {self.student.admission_number}'
 
 
 class Notification(models.Model):

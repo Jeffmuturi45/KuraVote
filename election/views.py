@@ -535,19 +535,12 @@ def student_notifications(request):
         return redirect('admin_dashboard')
 
     notifications = request.user.notifications.all()
-
-    request.user.notifications.filter(
-        is_read=False
-    ).update(is_read=True)
+    # Do NOT auto-mark as read here — let the user explicitly mark via button or bell dropdown
 
     context = {
         'notifications': notifications,
     }
-    return render(
-        request,
-        'student/notifications.html',
-        context
-    )
+    return render(request, 'student/notifications.html', context)
 
 
 @login_required(login_url='login')
@@ -579,6 +572,75 @@ def notifications_api(request):
             for n in unread
         ],
     })
+
+
+@login_required(login_url='login')
+def mark_notifications_read(request):
+    """Mark all unread notifications as read.
+    - POST from AJAX (bell dropdown): returns JSON
+    - POST from HTML form (notifications page): redirects back
+    """
+    if not request.user.is_staff:
+        request.user.notifications.filter(is_read=False).update(is_read=True)
+
+    # If request came from the notifications page (form submit), redirect back
+    if request.headers.get('X-CSRFToken') and not request.headers.get('X-Requested-With'):
+        return redirect('student_notifications')
+
+    # AJAX call
+    return JsonResponse({'ok': True})
+
+
+# ── Web Push ──────────────────────────────────────────────
+
+@login_required(login_url='login')
+def push_vapid_public_key(request):
+    """Return the VAPID public key so the SW can subscribe."""
+    from django.conf import settings as dj_settings
+    return JsonResponse({'publicKey': dj_settings.VAPID_PUBLIC_KEY})
+
+
+@login_required(login_url='login')
+def push_subscribe(request):
+    """Student browser posts its push subscription here."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    from .models import PushSubscription
+    try:
+        data = json.loads(request.body)
+        endpoint = data['endpoint']
+        p256dh = data['keys']['p256dh']
+        auth = data['keys']['auth']
+    except (KeyError, json.JSONDecodeError):
+        return JsonResponse({'error': 'Invalid subscription data'}, status=400)
+
+    PushSubscription.objects.update_or_create(
+        endpoint=endpoint,
+        defaults={
+            'student': request.user,
+            'p256dh':  p256dh,
+            'auth':    auth,
+        }
+    )
+    return JsonResponse({'ok': True})
+
+
+@login_required(login_url='login')
+def push_unsubscribe(request):
+    """Remove a push subscription (called when user revokes permission)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json
+    from .models import PushSubscription
+    try:
+        data = json.loads(request.body)
+        PushSubscription.objects.filter(endpoint=data['endpoint']).delete()
+    except Exception:
+        pass
+    return JsonResponse({'ok': True})
 
 
 # ═══════════════════════════════════════════════
@@ -719,6 +781,14 @@ def admin_election_activate(request, pk):
         ),
         notif_type='info',
     )
+    # ── Web Push (phone/desktop OS notification) ──────────
+    from .utils import send_web_push_bulk
+    send_web_push_bulk(
+        students=students,
+        title=f'🗳️ {election.election_name} — Voting Open!',
+        body=f'Vote before {election.end_date.strftime("%d %B at %I:%M %p")}. Tap to vote now.',
+        url='/vote/',
+    )
     messages.success(
         request,
         f'"{election.election_name}" is now active.'
@@ -728,183 +798,63 @@ def admin_election_activate(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_election_close(request, pk):
-    from .utils import (
-        invalidate_active_election,
-        detect_and_log_ties,
-        create_bulk_notifications
-    )
-
+    from .utils import invalidate_active_election, create_admin_notification
     election = get_object_or_404(Election, pk=pk)
     election.status = Election.STATUS_CLOSED
     election.save()
     invalidate_active_election()
     cache.delete(f'results_api_{pk}')
 
-    # ── Detect ties immediately on close ─────────────────
-    ties = detect_and_log_ties(election)
+    # ── Auto-detect ties and notify admin ─────────────────
+    tied_position_names = []
+    for position in election.positions.prefetch_related('candidates__student'):
+        candidates = sorted(
+            position.candidates.all(),
+            key=lambda c: c.vote_count,
+            reverse=True
+        )
+        is_tied, tied_cands, top_votes = _detect_tie(candidates)
+        if is_tied:
+            names = ', '.join(c.student.get_full_name() for c in tied_cands)
+            tied_position_names.append(
+                f'{position.position_name} ({names} — {top_votes} votes each)'
+            )
 
-    # Notify students
+    if tied_position_names:
+        tie_list = ' | '.join(tied_position_names)
+        create_admin_notification(
+            title=f'⚡ Tie Detected — {election.election_name}',
+            message=(
+                f'{len(tied_position_names)} tied position(s) need a re-run: '
+                f'{tie_list}. '
+                f'Go to Elections → ⚖️ Detect Ties to schedule the re-run.'
+            ),
+            notif_type='warning',
+        )
+        messages.warning(
+            request,
+            f'"{election.election_name}" closed — {len(tied_position_names)} tie(s) detected. '
+            f'Check your notifications and schedule a re-run.'
+        )
+    else:
+        messages.success(
+            request,
+            f'"{election.election_name}" has been closed.'
+        )
+
+    # Notify all students
     students = Student.objects.filter(is_staff=False, is_active=True)
     create_bulk_notifications(
         students=students,
         title='Election Closed',
         message=(
-            f'"{election.election_name}" has ended. '
-            f'Results are now available on the results page.'
+            f'"{election.election_name}" has ended. Check the results page.'
+            + (' A re-run will be announced shortly for tied positions.'
+               if tied_position_names else '')
         ),
         notif_type='warning',
     )
-
-    if ties:
-        messages.warning(
-            request,
-            f'"{election.election_name}" closed. '
-            f'{len(ties)} position(s) have a tie and require a rerun: '
-            f'{", ".join(t.position.position_name for t in ties)}. '
-            f'Go to Reports to manage the rerun.'
-        )
-    else:
-        messages.success(
-            request,
-            f'"{election.election_name}" has been closed. '
-            f'No ties detected.'
-        )
-
     return redirect('admin_elections')
-
-
-@staff_member_required(login_url='login')
-def create_rerun_election(request, tie_id):
-    """
-    Creates a new election containing only the tied positions
-    from the original election.
-    """
-    from django.utils import timezone
-    from datetime import timedelta
-    from .models import TieResolution
-
-    tie = get_object_or_404(TieResolution, pk=tie_id)
-
-    if request.method == 'POST':
-        start_date = request.POST.get('start_date')
-        end_date = request.POST.get('end_date')
-        notes = request.POST.get('notes', '').strip()
-
-        if not start_date or not end_date:
-            messages.error(request, 'Start and end dates are required.')
-            return redirect('admin_reports', election_id=tie.election.id)
-
-        # Create the rerun election
-        rerun = Election.objects.create(
-            election_name=(
-                f'{tie.election.election_name} — '
-                f'Rerun ({tie.position.position_name})'
-            ),
-            start_date=start_date,
-            end_date=end_date,
-            status=Election.STATUS_INACTIVE,
-            announcement=(
-                f'This is a rerun election for the tied position: '
-                f'{tie.position.position_name}. '
-                f'Only the tied candidates are on the ballot.'
-            ),
-        )
-
-        # Create the position in the rerun election
-        rerun_position = Position.objects.create(
-            election=rerun,
-            position_name=tie.position.position_name,
-            max_votes=tie.position.max_votes,
-        )
-
-        # Add only the tied candidates to the rerun position
-        for candidate in tie.tied_candidates.select_related('student').all():
-            Candidate.objects.create(
-                student=candidate.student,
-                position=rerun_position,
-                manifesto=candidate.manifesto,
-                photo=candidate.photo,
-            )
-
-        # Mark original tie as rerun scheduled
-        tie.status = TieResolution.STATUS_RERUN
-        tie.rerun_election = rerun
-        tie.admin_notes = notes
-        tie.resolved_at = timezone.now()
-        tie.save()
-
-        # Notify admin
-        from .utils import create_admin_notification
-        create_admin_notification(
-            title=f'Rerun Election Created',
-            message=(
-                f'Rerun election created for {tie.position.position_name}. '
-                f'Election name: "{rerun.election_name}". '
-                f'Activate it when ready.'
-            ),
-            notif_type='info',
-        )
-
-        messages.success(
-            request,
-            f'Rerun election created for {tie.position.position_name}. '
-            f'Go to Elections to activate it.'
-        )
-        return redirect('admin_elections')
-
-    return redirect('admin_reports', election_id=tie.election.id)
-
-
-@staff_member_required(login_url='login')
-def ensure_tie_resolution(request, position_id):
-    """
-    Creates a TieResolution record for a tied position if one
-    doesn't exist yet, then returns its ID.
-    """
-    from .models import TieResolution
-
-    position = get_object_or_404(Position, pk=position_id)
-    election = position.election
-    candidates = list(
-        Candidate.objects.filter(
-            position=position
-        ).select_related('student')
-    )
-
-    # Sort by actual vote count
-    candidates_with_votes = sorted(
-        [
-            (c, Vote.objects.filter(candidate=c).count())
-            for c in candidates
-        ],
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    if not candidates_with_votes:
-        return JsonResponse({'error': 'No candidates found'}, status=400)
-
-    top_votes = candidates_with_votes[0][1]
-    tied = [
-        c for c, votes in candidates_with_votes
-        if votes == top_votes and top_votes > 0
-    ]
-
-    if len(tied) < 2:
-        return JsonResponse({'error': 'No tie detected'}, status=400)
-
-    tie_obj, _ = TieResolution.objects.get_or_create(
-        position=position,
-        defaults={
-            'election':        election,
-            'tied_vote_count': top_votes,
-            'status':          TieResolution.STATUS_PENDING,
-        }
-    )
-    tie_obj.tied_candidates.set(tied)
-    tie_obj.save()
-
-    return JsonResponse({'tie_id': tie_obj.id})
 
 
 @staff_member_required(login_url='login')
@@ -1669,19 +1619,16 @@ def admin_results_api(request, election_id):
         )
         pos_total = Vote.objects.filter(position=position).count()
 
-        # ── Tiebreak detection ────────────────────────────
+        # ── Tie detection — no auto winner ───────────────
         winner_id = None
         is_tied = False
+        tied_ids = []
         if candidates and pos_total > 0:
-            top_votes = candidates[0].vote_count
-            if top_votes > 0:
-                tied = [c for c in candidates if c.vote_count == top_votes]
-                if len(tied) > 1:
-                    is_tied = True
-                    resolved = _resolve_tiebreak(position, election, tied)
-                    winner_id = resolved.id
-                else:
-                    winner_id = candidates[0].id
+            is_tied, tied_cands, top_votes = _detect_tie(candidates)
+            if is_tied:
+                tied_ids = [c.id for c in tied_cands]
+            elif candidates[0].vote_count > 0:
+                winner_id = candidates[0].id
 
         data.append({
             'position_id':   position.id,
@@ -1697,8 +1644,8 @@ def admin_results_api(request, election_id):
                     'color':      c.get_avatar_color(),
                     'votes':      c.vote_count,
                     'percentage': c.vote_percentage,
-                    'is_winner':  (c.id == winner_id),
-                    'is_tied':    is_tied and c.vote_count == (candidates[0].vote_count if candidates else 0),
+                    'is_winner':  (not is_tied and c.id == winner_id),
+                    'is_tied':    (c.id in tied_ids),
                 }
                 for c in candidates
             ]
@@ -1728,64 +1675,45 @@ def admin_results_api(request, election_id):
 
 @staff_member_required(login_url='login')
 def admin_reports(request, election_id):
-    from .models import TieResolution
-
     election = get_object_or_404(Election, pk=election_id)
     positions = Position.objects.filter(election=election)
 
     results = []
     for position in positions:
-        # Always sort by actual vote count — never by registration order
-        candidates_raw = Candidate.objects.filter(
-            position=position
-        ).select_related('student')
-
-        candidates_with_votes = sorted(
-            [(c, Vote.objects.filter(candidate=c).count())
-             for c in candidates_raw],
-            key=lambda x: x[1],
+        candidates = sorted(
+            Candidate.objects.filter(
+                position=position
+            ).select_related('student'),
+            key=lambda c: c.vote_count,
             reverse=True
         )
-
-        # Rebuild sorted candidate list
-        candidates = [c for c, _ in candidates_with_votes]
         pos_total = Vote.objects.filter(position=position).count()
 
-        # Detect tie
+        winner = None
+        is_tied = False
         tied_candidates = []
-        is_tie = False
+        tiebreak_info = None
+
         if candidates and pos_total > 0:
-            top_votes = candidates_with_votes[0][1]
-            tied_candidates = [
-                c for c, votes in candidates_with_votes
-                if votes == top_votes and top_votes > 0
-            ]
-            is_tie = len(tied_candidates) > 1
-
-        # Get existing tie resolution if any
-        tie_resolution = None
-        try:
-            tie_resolution = position.tie_resolution
-        except TieResolution.DoesNotExist:
-            pass
-
-        # Set winner — only when clear (no tie)
-        if is_tie:
-            winner = None
-        elif candidates and pos_total > 0 \
-                and candidates_with_votes[0][1] > 0:
-            winner = candidates[0]
-        else:
-            winner = None
+            is_tied, tied_candidates, top_votes = _detect_tie(candidates)
+            if is_tied:
+                tiebreak_info = {
+                    'tied_names': ', '.join(
+                        c.student.get_full_name() for c in tied_candidates
+                    ),
+                    'vote_count': top_votes,
+                }
+            elif candidates[0].vote_count > 0:
+                winner = candidates[0]
 
         results.append({
-            'position':        position,
-            'candidates':      candidates,
-            'winner':          winner,
-            'total_votes':     pos_total,
-            'is_tie':          is_tie,
-            'tied_candidates': tied_candidates,
-            'tie_resolution':  tie_resolution,
+            'position':         position,
+            'candidates':       candidates,
+            'winner':           winner,
+            'total_votes':      pos_total,
+            'is_tied':          is_tied,
+            'tied_candidates':  tied_candidates,
+            'tiebreak_info':    tiebreak_info,
         })
 
     total_students = Student.objects.filter(is_staff=False).count()
@@ -1877,18 +1805,18 @@ def export_pdf(request, election_id):
         pos_total = Vote.objects.filter(position=position).count()
 
         winner = None
-        if candidates and pos_total > 0 and candidates[0].vote_count > 0:
-            top_votes = candidates[0].vote_count
-            tied = [c for c in candidates if c.vote_count == top_votes]
-            winner = _resolve_tiebreak(position, election, tied) if len(
-                tied) > 1 else candidates[0]
+        is_tied = False
+        if candidates and pos_total > 0:
+            is_tied, tied_cands, _ = _detect_tie(candidates)
+            if not is_tied and candidates[0].vote_count > 0:
+                winner = candidates[0]
 
         elements.append(
             Paragraph(position.position_name, styles['Heading3'])
         )
         elements.append(
             Paragraph(
-                f'Winner: {winner.student.get_full_name()}'
+                f'{"⚡ TIE — Re-run required: " + ", ".join(c.student.get_full_name() for c in tied_cands) if is_tied else ("Winner: " + winner.student.get_full_name() if winner else "No votes cast")}'
                 if winner else 'No votes cast.',
                 styles['Normal']
             )
@@ -2030,11 +1958,11 @@ def export_excel(request, election_id):
         pos_total = Vote.objects.filter(position=position).count()
 
         winner = None
-        if candidates and pos_total > 0 and candidates[0].vote_count > 0:
-            top_votes = candidates[0].vote_count
-            tied = [c for c in candidates if c.vote_count == top_votes]
-            winner = _resolve_tiebreak(position, election, tied) if len(
-                tied) > 1 else candidates[0]
+        is_tied = False
+        if candidates and pos_total > 0:
+            is_tied, tied_cands, _ = _detect_tie(candidates)
+            if not is_tied and candidates[0].vote_count > 0:
+                winner = candidates[0]
 
         ws.merge_cells(f'A{current_row}:F{current_row}')
         pos_cell = ws.cell(
@@ -2310,84 +2238,20 @@ def admin_student_search_api(request):
 
 # ── Tiebreak Resolution ────────────────────────────────────
 
-def _resolve_tiebreak(position, election, tied_candidates):
+def _detect_tie(candidates):
     """
-    Best-and-fairest tiebreaker strategy:
-
-    1. PRIMARY  — Earliest first vote cast (the candidate who
-                  received their FIRST vote earliest wins).
-                  This is purely random from voters' perspective
-                  (no voter knows who voted first) and rewards
-                  no strategic behaviour.
-
-    2. FALLBACK — If two candidates received their first vote at
-                  the exact same millisecond (astronomically rare),
-                  we fall back to a deterministic hash-based draw
-                  using the election ID + position ID + candidate
-                  IDs so the result is reproducible and auditable.
-
-    Every resolution is logged to TiebreakLog for full transparency.
+    Returns (is_tied, tied_candidates, top_votes).
+    Never picks a winner — ties must be resolved via admin re-run.
     """
-    from .models import TiebreakLog
-    import hashlib
-
-    tied_ids = [c.id for c in tied_candidates]
-    vote_count = tied_candidates[0].vote_count  # all equal at this point
-
-    # ── Step 1: Earliest first vote ───────────────────────
-    winner = None
-    earliest_time = None
-    for candidate in tied_candidates:
-        first_vote = Vote.objects.filter(
-            candidate=candidate,
-            election=election,
-        ).order_by('voted_at').values_list('voted_at', flat=True).first()
-
-        if first_vote is not None:
-            if earliest_time is None or first_vote < earliest_time:
-                earliest_time = first_vote
-                winner = candidate
-
-    method = 'earliest_first_vote'
-    notes = (
-        f'Tie at {vote_count} votes between '
-        f'{[c.student.get_full_name() for c in tied_candidates]}. '
-        f'Winner determined by earliest received first vote.'
-    )
-
-    # ── Step 2: Hash-based fallback if still tied ─────────
-    if winner is None:
-        seed = f'{election.id}-{position.id}-{sorted(tied_ids)}'
-        digest = hashlib.sha256(seed.encode()).hexdigest()
-        # Map hash to one of the tied candidates deterministically
-        idx = int(digest[:8], 16) % len(tied_candidates)
-        winner = tied_candidates[idx]
-        method = 'deterministic_hash_draw'
-        notes = (
-            f'Tie at {vote_count} votes. '
-            f'No first-vote time difference found. '
-            f'Winner selected via SHA-256 hash draw (seed: {seed[:20]}…).'
-        )
-
-    # ── Log the decision ──────────────────────────────────
-    TiebreakLog.objects.create(
-        position=position,
-        election=election,
-        tied_candidates=[
-            {
-                'id':    c.id,
-                'name':  c.student.get_full_name(),
-                'votes': c.vote_count,
-            }
-            for c in tied_candidates
-        ],
-        winner_candidate_id=winner.id,
-        winner_name=winner.student.get_full_name(),
-        method=method,
-        notes=notes,
-    )
-
-    return winner
+    if not candidates:
+        return False, [], 0
+    top_votes = candidates[0].vote_count
+    if top_votes == 0:
+        return False, [], 0
+    tied = [c for c in candidates if c.vote_count == top_votes]
+    if len(tied) > 1:
+        return True, tied, top_votes
+    return False, [], 0
 
 
 @staff_member_required(login_url='login')
@@ -2457,10 +2321,14 @@ def admin_start_rerun(request, election_id):
             request, 'Please select at least one position for re-run.')
         return redirect('admin_detect_ties', election_id=election_id)
 
-    # Mark positions as rerun
-    Position.objects.filter(
+    # Get position names for the notification message
+    rerun_positions = Position.objects.filter(
         pk__in=position_ids, election=election
-    ).update(is_rerun=True)
+    )
+    position_names = ', '.join(p.position_name for p in rerun_positions)
+
+    # Mark positions as rerun
+    rerun_positions.update(is_rerun=True)
 
     # Delete only votes for the rerun positions so students can re-vote
     Vote.objects.filter(
@@ -2476,6 +2344,27 @@ def admin_start_rerun(request, election_id):
         'Please cast your vote again for the positions listed.'
     )
     election.save()
+
+    # Notify ALL active students (in-app + web push)
+    students = Student.objects.filter(is_staff=False, is_active=True)
+    create_bulk_notifications(
+        students=students,
+        title='⚡ Tie Re-run Started',
+        message=(
+            f'A tie was detected in "{election.election_name}". '
+            f'A re-run vote is now open for: {position_names}. '
+            f'Please log in and cast your vote again for '
+            f'{"these positions" if len(position_ids) > 1 else "this position"}.'
+        ),
+        notif_type='warning',
+    )
+    from .utils import send_web_push_bulk
+    send_web_push_bulk(
+        students=students,
+        title='⚡ Tie Re-run — Vote Again!',
+        body=f'A tie in "{election.election_name}" needs your vote. Tap to vote on: {position_names}.',
+        url='/vote/',
+    )
 
     n = len(position_ids)
     messages.success(
@@ -2503,6 +2392,25 @@ def admin_close_rerun(request, election_id):
     election.status = Election.STATUS_CLOSED
     election.announcement = ''
     election.save()
+
+    # Notify all students — in-app + web push
+    students = Student.objects.filter(is_staff=False, is_active=True)
+    create_bulk_notifications(
+        students=students,
+        title='🏆 Re-run Complete — Final Results Available',
+        message=(
+            f'The tie re-run for "{election.election_name}" is now closed. '
+            f'Final results are available. Tap Results to see the winners.'
+        ),
+        notif_type='success',
+    )
+    from .utils import send_web_push_bulk
+    send_web_push_bulk(
+        students=students,
+        title='🏆 Final Results Available!',
+        body=f'The re-run for "{election.election_name}" is complete. Tap to see the winners.',
+        url='/results/',
+    )
 
     messages.success(
         request,

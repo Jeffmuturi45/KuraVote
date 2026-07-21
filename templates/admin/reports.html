@@ -180,7 +180,6 @@
           </div>
 
            {% if not result.tie_resolution or result.tie_resolution.status == 'pending' %}
-            {% if not result.tie_resolution or result.tie_resolution.status == 'pending' %}
   <button type="button"
           onclick="scheduleRerun(
             {{ result.tie_resolution.id|default:'null' }},

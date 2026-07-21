@@ -4,67 +4,139 @@
 {% block content %}
 <div class="student-shell">
 
-  <!-- ── Top Navbar ── -->
-  <nav class="student-navbar d-flex align-items-center
-              justify-content-between px-3 py-2">
+  <!-- ══ Top Navbar ════════════════════════════════════════ -->
+  <nav class="student-navbar d-flex align-items-center justify-content-between px-3 py-2">
 
     <div style="font-family:'Sora',sans-serif; font-weight:700;
                 font-size:1.1rem; color:#fff;">
-      Kura<span style="color:#eab308">Vote</span>
+      {{ system_name|default:"KuraVote" }}
     </div>
 
-    <div class="d-flex align-items-center gap-2">
-      <!-- Student chip -->
-      <div style="background:rgba(255,255,255,0.12);
-                  border-radius:20px; padding:4px 12px;
-                  font-size:0.75rem; color:#fff;
-                  display:flex; align-items:center; gap:5px;">
-        <i class="fa fa-user-circle" style="font-size:12px"></i>
-        Adm: {{ request.user.admission_number }}
+    <div class="d-flex align-items-center gap-3">
+
+      <!-- ── Notification Bell ── -->
+      <div style="position:relative;" id="notif-container">
+        <button id="notif-bell-btn"
+                onclick="toggleNotifDropdown()"
+                style="background:rgba(255,255,255,0.12); border:none;
+                       width:36px; height:36px; border-radius:50%;
+                       display:flex; align-items:center; justify-content:center;
+                       cursor:pointer; position:relative; transition:background 0.15s;"
+                onmouseover="this.style.background='rgba(255,255,255,0.2)'"
+                onmouseout="this.style.background='rgba(255,255,255,0.12)'"
+                title="Notifications">
+          <i class="fa fa-bell" style="font-size:14px; color:#fff;"></i>
+          <!-- Red badge — shown only when unread > 0 -->
+          <span id="notif-badge"
+                style="display:none; position:absolute; top:-3px; right:-3px;
+                       background:#ef4444; color:#fff; border-radius:50%;
+                       width:17px; height:17px; font-size:9px; font-weight:700;
+                       align-items:center; justify-content:center;
+                       border:2px solid transparent;">
+            0
+          </span>
+        </button>
+
+        <!-- ── Dropdown Panel ── -->
+        <div id="notif-dropdown"
+             style="display:none; position:absolute; top:44px; right:0;
+                    width:320px; background:#fff; border-radius:16px;
+                    box-shadow:0 12px 40px rgba(0,0,0,0.15);
+                    border:1px solid #e2e8f0; z-index:1000; overflow:hidden;">
+
+          <!-- Header -->
+          <div style="padding:14px 16px; border-bottom:1px solid #f0fdf4;
+                      display:flex; align-items:center; justify-content:space-between;
+                      background:#f8fafc;">
+            <div style="font-weight:700; font-size:13px; color:#1e293b;">
+              <i class="fa fa-bell me-2" style="color:#16a34a;"></i>Notifications
+            </div>
+            <a href="{% url 'student_notifications' %}"
+               style="font-size:11px; color:#16a34a; text-decoration:none; font-weight:600;">
+              View All
+            </a>
+          </div>
+
+          <!-- Notification list -->
+          <div id="notif-list"
+               style="max-height:340px; overflow-y:auto;">
+            <!-- Populated by JS -->
+            <div id="notif-loading"
+                 style="padding:24px; text-align:center; color:#94a3b8; font-size:13px;">
+              <i class="fa fa-circle-notch fa-spin me-2"></i>Loading…
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div style="padding:10px 16px; border-top:1px solid #f0f0f0; background:#f8fafc;">
+            <a href="{% url 'student_notifications' %}"
+               style="display:block; text-align:center; font-size:12px;
+                      color:#16a34a; text-decoration:none; font-weight:600;">
+              See all notifications →
+            </a>
+          </div>
+        </div>
       </div>
 
-      <!-- Logout -->
+      <!-- ── Student chip ── -->
+      <div style="background:rgba(255,255,255,0.12); border-radius:20px;
+                  padding:4px 12px; font-size:0.75rem; color:#fff;
+                  display:flex; align-items:center; gap:5px;">
+        <i class="fa fa-user-circle" style="font-size:12px"></i>
+        {{ request.user.admission_number }}
+      </div>
+
+      <!-- ── Logout ── -->
       <a href="{% url 'logout' %}"
-         style="color:rgba(255,255,255,0.6); font-size:13px;
-                text-decoration:none;"
+         style="color:rgba(255,255,255,0.7); font-size:13px; text-decoration:none;"
          title="Logout">
         <i class="fa fa-sign-out-alt"></i>
       </a>
     </div>
   </nav>
 
-  <!-- ── Page Content ── -->
+  <!-- ══ Page Content ══════════════════════════════════════ -->
   <div class="student-content content-pad">
     {% block student_content %}{% endblock %}
   </div>
 
-  <!-- ── Bottom Navigation ── -->
+  <!-- ══ Bottom Navigation ═════════════════════════════════ -->
   <nav class="student-bottom-nav">
 
     <a href="{% url 'student_dashboard' %}"
-       class="bottom-nav-item
-       {% block nav_dashboard %}{% endblock %}">
+       class="bottom-nav-item {% block nav_dashboard %}{% endblock %}">
       <i class="fa fa-home"></i>
       <span>Home</span>
     </a>
 
     <a href="{% url 'ballot' %}"
-       class="bottom-nav-item
-       {% block nav_ballot %}{% endblock %}">
+       class="bottom-nav-item {% block nav_ballot %}{% endblock %}">
       <i class="fa fa-vote-yea"></i>
       <span>Vote</span>
     </a>
 
     <a href="{% url 'student_results' %}"
-       class="bottom-nav-item
-       {% block nav_results %}{% endblock %}">
+       class="bottom-nav-item {% block nav_results %}{% endblock %}">
       <i class="fa fa-chart-bar"></i>
       <span>Results</span>
     </a>
 
+    <!-- Notifications tab with live unread badge -->
+    <a href="{% url 'student_notifications' %}"
+       class="bottom-nav-item {% block nav_notifications %}{% endblock %}"
+       style="position:relative;">
+      <span style="position:relative; display:inline-block;">
+        <i class="fa fa-bell"></i>
+        <span id="bottom-notif-dot"
+              style="display:none; position:absolute; top:-4px; right:-6px;
+                     width:8px; height:8px; border-radius:50%;
+                     background:#ef4444; border:1.5px solid #fff;"></span>
+      </span>
+      <span>Alerts</span>
+    </a>
+
     <a href="{% url 'student_profile' %}"
-       class="bottom-nav-item
-       {% block nav_profile %}{% endblock %}">
+       class="bottom-nav-item {% block nav_profile %}{% endblock %}">
       <i class="fa fa-user"></i>
       <span>Profile</span>
     </a>
@@ -73,5 +145,234 @@
 
 </div>
 
-<script src="{% static 'js/kuravote.js' %}"></script>
+<!-- ══ Notification JS ═══════════════════════════════════ -->
+<script>
+const NOTIF_API_URL        = "{% url 'notifications_api' %}";
+const MARK_READ_URL        = "{% url 'mark_notifications_read' %}";
+const CSRF_TOKEN           = "{{ csrf_token }}";
+let   notifDropdownOpen    = false;
+let   notifPollInterval    = null;
+
+// ── Toggle dropdown ──────────────────────────────────────
+function toggleNotifDropdown() {
+  const dropdown = document.getElementById('notif-dropdown');
+  notifDropdownOpen = !notifDropdownOpen;
+
+  if (notifDropdownOpen) {
+    dropdown.style.display = 'block';
+    loadNotifications(true); // load + mark read
+  } else {
+    dropdown.style.display = 'none';
+  }
+}
+
+// ── Close on outside click ───────────────────────────────
+document.addEventListener('click', function(e) {
+  const container = document.getElementById('notif-container');
+  if (notifDropdownOpen && !container.contains(e.target)) {
+    document.getElementById('notif-dropdown').style.display = 'none';
+    notifDropdownOpen = false;
+  }
+});
+
+// ── Load notifications from API ──────────────────────────
+function loadNotifications(markRead = false) {
+  fetch(NOTIF_API_URL)
+    .then(r => r.json())
+    .then(data => {
+      renderNotifications(data.notifications, data.count);
+      if (markRead && data.count > 0) {
+        // Mark all as read server-side
+        fetch(MARK_READ_URL, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json' }
+        }).then(() => {
+          // Immediately clear the badge locally
+          updateBadge(0);
+        });
+      }
+    })
+    .catch(() => {
+      document.getElementById('notif-list').innerHTML =
+        '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;">Could not load notifications.</div>';
+    });
+}
+
+// ── Render list ──────────────────────────────────────────
+function renderNotifications(notifications, count) {
+  updateBadge(count);
+  const list = document.getElementById('notif-list');
+  document.getElementById('notif-loading').style.display = 'none';
+
+  if (!notifications.length) {
+    list.innerHTML = `
+      <div style="padding:32px 20px; text-align:center;">
+        <i class="fa fa-bell-slash" style="font-size:2rem; color:#bbf7d0; display:block; margin-bottom:10px;"></i>
+        <div style="font-size:13px; color:#94a3b8;">No new notifications</div>
+      </div>`;
+    return;
+  }
+
+  const icons  = { success: 'fa-check-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+  const colors = { success: '#16a34a',          warning: '#d97706',                  info: '#0ea5e9'        };
+  const bgs    = { success: '#f0fdf4',           warning: '#fefce8',                  info: '#f0f9ff'        };
+
+  list.innerHTML = notifications.map(n => `
+    <div style="padding:12px 16px; border-bottom:1px solid #f8fafc;
+                display:flex; gap:10px; align-items:flex-start;
+                background:${n.is_read ? '#fff' : '#f0fdf4'};">
+      <div style="width:34px; height:34px; border-radius:8px; flex-shrink:0;
+                  background:${bgs[n.type]||'#f0fdf4'};
+                  display:flex; align-items:center; justify-content:center;">
+        <i class="fa ${icons[n.type]||'fa-info-circle'}"
+           style="color:${colors[n.type]||'#16a34a'}; font-size:14px;"></i>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:12px; font-weight:700; color:#1e293b; margin-bottom:2px;">
+          ${escapeHtml(n.title)}
+        </div>
+        <div style="font-size:11px; color:#64748b; line-height:1.4; margin-bottom:4px;
+                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+             title="${escapeHtml(n.message)}">
+          ${escapeHtml(n.message)}
+        </div>
+        <div style="font-size:10px; color:#94a3b8;">
+          <i class="fa fa-clock me-1"></i>${escapeHtml(n.created_at)}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Update badge + bottom dot ────────────────────────────
+function updateBadge(count) {
+  const badge  = document.getElementById('notif-badge');
+  const dot    = document.getElementById('bottom-notif-dot');
+  if (count > 0) {
+    badge.style.display = 'flex';
+    badge.textContent   = count > 9 ? '9+' : count;
+    dot.style.display   = 'block';
+  } else {
+    badge.style.display = 'none';
+    dot.style.display   = 'none';
+  }
+}
+
+// ── Poll for new notifications every 30 seconds ──────────
+function pollNotifications() {
+  fetch(NOTIF_API_URL)
+    .then(r => r.json())
+    .then(data => updateBadge(data.count))
+    .catch(() => {});
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.appendChild(document.createTextNode(str || ''));
+  return d.innerHTML;
+}
+
+// ── Start on page load ───────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  pollNotifications();                              // immediate check
+  notifPollInterval = setInterval(pollNotifications, 30000); // every 30s
+  registerServiceWorkerAndPush();                  // web push setup
+});
+
+// ── Service Worker + Web Push Registration ───────────────
+async function registerServiceWorkerAndPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+    // Only ask once — if already granted or denied, skip
+    if (Notification.permission === 'denied') return;
+    if (Notification.permission === 'granted') {
+      await subscribePush(reg);
+      return;
+    }
+
+    // Show a friendly in-page prompt first (better UX than raw browser dialog)
+    showPushPrompt(reg);
+  } catch (e) {
+    console.log('SW registration failed:', e);
+  }
+}
+
+function showPushPrompt(reg) {
+  const prompt = document.createElement('div');
+  prompt.id = 'push-prompt';
+  prompt.innerHTML = `
+    <div style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+                background:#fff;border-radius:16px;padding:16px 20px;
+                box-shadow:0 8px 30px rgba(0,0,0,0.15);border:1px solid #bbf7d0;
+                z-index:2000;max-width:340px;width:90%;display:flex;
+                align-items:flex-start;gap:12px;">
+      <div style="width:38px;height:38px;border-radius:10px;background:#f0fdf4;
+                  display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <i class="fa fa-bell" style="color:#16a34a;font-size:1.1rem;"></i>
+      </div>
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:13px;color:#166534;margin-bottom:4px;">
+          Enable Notifications
+        </div>
+        <div style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.4;">
+          Get notified when elections open, a re-run starts, and results are out — even when you're not on the site.
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="push-allow-btn"
+                  style="background:#16a34a;color:#fff;border:none;border-radius:8px;
+                         padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;">
+            Allow Notifications
+          </button>
+          <button id="push-deny-btn"
+                  style="background:#f1f5f9;color:#64748b;border:none;border-radius:8px;
+                         padding:7px 12px;font-size:12px;cursor:pointer;">
+            Not now
+          </button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(prompt);
+
+  document.getElementById('push-allow-btn').addEventListener('click', async () => {
+    prompt.remove();
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') await subscribePush(reg);
+  });
+  document.getElementById('push-deny-btn').addEventListener('click', () => {
+    prompt.remove();
+  });
+}
+
+async function subscribePush(reg) {
+  try {
+    // Get VAPID public key from server
+    const keyResp = await fetch("{% url 'push_vapid_public_key' %}");
+    const { publicKey } = await keyResp.json();
+    if (!publicKey) return; // VAPID not configured yet
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly:      true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+
+    // Send subscription to server
+    await fetch("{% url 'push_subscribe' %}", {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body:    JSON.stringify(sub),
+    });
+  } catch (e) {
+    console.log('Push subscription failed:', e);
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+</script>
 {% endblock %}

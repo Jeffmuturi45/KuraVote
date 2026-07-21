@@ -19,17 +19,29 @@ from django.conf import settings
 from django.urls import path, include
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import admin
-admin.site.login_template = 'admin/login.html'  # Custom admin login template
+from django.views.static import serve as static_serve
+import os
+admin.site.login_template = 'admin/login.html'
+
+
+def service_worker(request):
+    """Serve the service worker from root so it has full-scope push access."""
+    from django.http import FileResponse, Http404
+    sw_path = os.path.join(settings.BASE_DIR, 'static', 'sw.js')
+    if not os.path.exists(sw_path):
+        raise Http404
+    response = FileResponse(open(sw_path, 'rb'),
+                            content_type='application/javascript')
+    response['Service-Worker-Allowed'] = '/'
+    return response
+
 
 urlpatterns = [
-    # Django built-in admin panel
     path('admin/', admin.site.urls),
-
-    # All KuraVote app URLs
+    path('sw.js', service_worker, name='service_worker'),
     path('', include('election.urls')),
 ]
 
-# Serve media files (candidate photos) during development
 if settings.DEBUG:
     urlpatterns += static(
         settings.MEDIA_URL,
