@@ -1,0 +1,64 @@
+{% extends "admin/base_admin.html" %}
+{% load static %}
+
+{% block title %}Auto-Check Ties{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">🔍 Auto-Check Ties</h4>
+                    <p class="text-muted mb-0">
+                        Find elections with tied positions that need reruns
+                    </p>
+                </div>
+                <div class="card-body">
+                    {% if elections_with_ties %}
+                        <div class="alert alert-info">
+                            <strong>Found {{ elections_with_ties|length }} election(s) with ties</strong>
+                        </div>
+                        
+                        <div class="row">
+                            {% for item in elections_with_ties %}
+                                <div class="col-md-6 mb-4">
+                                    <div class="card h-100">
+                                        <div class="card-body">
+                                            <h5 class="card-title">{{ item.election.election_name }}</h5>
+                                            <p class="card-text">
+                                                <span class="badge bg-warning">Ties Detected</span>
+                                                <span class="badge bg-secondary">{{ item.tie_count }} position(s)</span>
+                                            </p>
+                                            <ul>
+                                                {% for pos in item.tied_positions %}
+                                                    <li>{{ pos.position_name }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                            <a href="{% url 'rerun_create' item.election.id %}" class="btn btn-primary btn-sm">
+                                                <i class="fas fa-plus me-2"></i>Create Rerun
+                                            </a>
+                                            <a href="{% url 'admin_election_edit' item.election.id %}" class="btn btn-secondary btn-sm">
+                                                <i class="fas fa-edit me-2"></i>Edit Election
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <h5>No ties detected!</h5>
+                            <p class="text-muted">All closed elections have clear winners.</p>
+                            <a href="{% url 'admin_elections' %}" class="btn btn-primary">
+                                Back to Elections
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

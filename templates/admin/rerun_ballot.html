@@ -1,0 +1,132 @@
+{% extends "student/base_student.html" %}
+{% load static %}
+
+{% block title %}Rerun Voting{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">🔄 Rerun Vote</h4>
+                    <p class="text-muted mb-0">
+                        {{ position.position_name }} - {{ rerun.original_election.election_name }}
+                    </p>
+                </div>
+                <div class="card-body">
+                    <!-- Timer -->
+                    <div class="alert alert-info">
+                        <strong>⏰ Voting ends:</strong>
+                        {{ rerun.end_date|date:"F j, Y" }} at {{ rerun.end_date|date:"g:i A" }}
+                        <div id="countdown" class="mt-2"></div>
+                    </div>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            {% for candidate in candidates %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="card candidate-card h-100">
+                                        <div class="card-body text-center">
+                                            {% if candidate.photo %}
+                                                <img src="{{ candidate.photo.url }}" 
+                                                     alt="{{ candidate.student.get_full_name }}"
+                                                     class="rounded-circle mb-3"
+                                                     style="width: 100px; height: 100px; object-fit: cover;">
+                                            {% else %}
+                                                <div class="rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center"
+                                                     style="width: 100px; height: 100px; background-color: {{ candidate.get_avatar_color }}; color: white; font-size: 36px;">
+                                                    {{ candidate.get_initials }}
+                                                </div>
+                                            {% endif %}
+                                            
+                                            <h5>{{ candidate.student.get_full_name }}</h5>
+                                            <p class="text-muted">
+                                                Admission: {{ candidate.student.admission_number }}
+                                            </p>
+                                            <p class="small">{{ candidate.manifesto|truncatechars:100 }}</p>
+                                            
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" 
+                                                       name="candidate" value="{{ candidate.id }}"
+                                                       id="candidate_{{ candidate.id }}" required>
+                                                <label class="form-check-label" for="candidate_{{ candidate.id }}">
+                                                    Select this candidate
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="col-12">
+                                    <div class="alert alert-warning">
+                                        No candidates available for this rerun.
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg w-100">
+                                <i class="fas fa-check me-2"></i>Submit Vote
+                            </button>
+                            <a href="{% url 'student_dashboard' %}" class="btn btn-secondary w-100 mt-2">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateCountdown() {
+    const now = new Date().getTime();
+    const target = new Date('{{ rerun.end_date|date:"Y-m-d H:i:s" }}').getTime();
+    const diff = target - now;
+    
+    if (diff <= 0) {
+        document.getElementById('countdown').innerHTML = 'Voting has ended!';
+        return;
+    }
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    document.getElementById('countdown').innerHTML = 
+        `Time remaining: ${hours}h ${minutes}m ${seconds}s`;
+}
+
+setInterval(updateCountdown, 1000);
+updateCountdown();
+
+// Add hover effect to candidate cards
+document.querySelectorAll('.candidate-card').forEach(card => {
+    card.addEventListener('click', function() {
+        const radio = this.querySelector('input[type="radio"]');
+        if (radio) {
+            radio.checked = true;
+        }
+    });
+});
+</script>
+
+<style>
+.candidate-card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.candidate-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+.candidate-card .form-check {
+    margin-top: 10px;
+}
+</style>
+{% endblock %}

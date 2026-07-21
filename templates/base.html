@@ -199,6 +199,90 @@
     });
   </script>
 
+  <!-- Add at the bottom of the body, before closing </body> -->
+<script>
+// Register Service Worker and handle push notifications
+(function() {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        // Get the VAPID public key from the server
+        fetch('/push-vapid-public-key/')
+            .then(response => response.json())
+            .then(data => {
+                const publicKey = data.publicKey;
+                
+                // Register service worker
+                navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                    .then(registration => {
+                        console.log('Service Worker registered');
+                        
+                        // Check if already subscribed
+                        return registration.pushManager.getSubscription()
+                            .then(subscription => {
+                                if (subscription) {
+                                    return subscription;
+                                }
+                                
+                                // Subscribe for push notifications
+                                return registration.pushManager.subscribe({
+                                    userVisibleOnly: true,
+                                    applicationServerKey: publicKey
+                                });
+                            });
+                    })
+                    .then(subscription => {
+                        if (subscription) {
+                            // Send subscription to server
+                            fetch('/push-subscribe/', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+                                },
+                                body: JSON.stringify({
+                                    endpoint: subscription.endpoint,
+                                    keys: {
+                                        p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+                                        auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+                                    }
+                                })
+                            });
+                        }
+                    })
+                    .catch(err => {
+                        console.log('Push notification setup error:', err);
+                    });
+            })
+            .catch(err => {
+                console.log('Error getting VAPID key:', err);
+            });
+    }
+})();
+
+// Handle notification permission
+document.addEventListener('DOMContentLoaded', function() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        // Ask for permission after user interaction
+        document.addEventListener('click', function askPermission() {
+            Notification.requestPermission();
+            document.removeEventListener('click', askPermission);
+        }, { once: true });
+    }
+});
+</script>
+
+<!-- In your base template, change the service worker registration -->
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js', { scope: '/' })
+        .then(registration => {
+            console.log('Service Worker registered');
+        })
+        .catch(err => {
+            console.log('Service Worker registration failed:', err);
+        });
+}
+</script>
+
   {% block extra_js %}{% endblock %}
 </body>
 </html>

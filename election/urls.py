@@ -277,6 +277,16 @@ urlpatterns = [
         views.admin_tiebreak_log,
         name='admin_tiebreak_log'
     ),
+    path('admin/rerun/create/<int:election_id>/',
+         views.rerun_create, name='rerun_create'),
+    path('admin/rerun/manage/<int:rerun_id>/',
+         views.rerun_manage, name='rerun_manage'),
+    path('admin/rerun/list/', views.rerun_list, name='rerun_list'),
+    path('admin/rerun/auto-check/',
+         views.rerun_auto_check, name='rerun_auto_check'),
+
+    # Student Rerun URLs
+    path('rerun/vote/<int:rerun_id>/', views.rerun_ballot, name='rerun_ballot'),
     path(
         'admin-panel/elections/<int:election_id>/detect-ties/',
         views.admin_detect_ties,
@@ -287,6 +297,13 @@ urlpatterns = [
         views.admin_start_rerun,
         name='admin_start_rerun'
     ),
+    path('push-vapid-public-key/', views.push_vapid_public_key,
+         name='push_vapid_public_key'),
+    path('push-subscribe/', views.push_subscribe, name='push_subscribe'),
+    path('push-unsubscribe/', views.push_unsubscribe, name='push_unsubscribe'),
+
+    # Service Worker
+    path('sw.js', views.service_worker, name='sw.js'),
     path(
         'admin-panel/elections/<int:election_id>/close-rerun/',
         views.admin_close_rerun,

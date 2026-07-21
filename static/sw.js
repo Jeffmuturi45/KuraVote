@@ -1,5 +1,4 @@
 // sw.js — KuraVote Service Worker
-// Must be served from the root: /sw.js
 // Handles incoming Web Push messages and shows OS-level notifications.
 
 self.addEventListener('install', event => {
@@ -12,7 +11,11 @@ self.addEventListener('activate', event => {
 
 // ── Receive a push and show an OS notification ───────────
 self.addEventListener('push', event => {
-  let data = { title: 'KuraVote', body: 'You have a new notification.', url: '/' };
+  let data = { 
+    title: 'KuraVote', 
+    body: 'You have a new notification.', 
+    url: '/' 
+  };
 
   if (event.data) {
     try {
@@ -23,16 +26,16 @@ self.addEventListener('push', event => {
   }
 
   const options = {
-    body:    data.body,
-    icon:    '/static/img/icon-192.png',  // add a 192×192 PNG to static/img/
-    badge:   '/static/img/badge-72.png',  // small monochrome 72×72 PNG
+    body: data.body,
+    icon: '/static/img/icon-192.png',
+    badge: '/static/img/badge-72.png',
     vibrate: [100, 50, 100],
-    data:    { url: data.url || '/' },
+    data: { url: data.url || '/' },
     actions: [
-      { action: 'open',    title: 'Open KuraVote' },
+      { action: 'open', title: 'Open KuraVote' },
       { action: 'dismiss', title: 'Dismiss' },
     ],
-    tag:     'kuravote-notification',   // replaces previous notification of same tag
+    tag: 'kuravote-notification',
     renotify: true,
   };
 
@@ -54,14 +57,12 @@ self.addEventListener('notificationclick', event => {
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then(clientList => {
-        // If app is already open, focus it
         for (const client of clientList) {
           if (client.url.includes(self.location.origin) && 'focus' in client) {
             client.navigate(url);
             return client.focus();
           }
         }
-        // Otherwise open a new window
         if (clients.openWindow) {
           return clients.openWindow(url);
         }

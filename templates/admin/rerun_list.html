@@ -1,0 +1,144 @@
+{% extends "admin/base_admin.html" %}
+{% load static %}
+
+{% block title %}Rerun Elections{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">🔄 Rerun Elections</h4>
+                    <div>
+                        <a href="{% url 'rerun_auto_check' %}" class="btn btn-info btn-sm me-2">
+                            <i class="fas fa-search me-2"></i>Auto-Check Ties
+                        </a>
+                        <a href="{% url 'admin_elections' %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Elections
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Active Reruns -->
+                    {% if active_reruns %}
+                        <h5 class="text-success">Active Reruns</h5>
+                        <div class="table-responsive mb-4">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Position</th>
+                                        <th>Original Election</th>
+                                        <th>Ends</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for rerun in active_reruns %}
+                                        <tr>
+                                            <td>{{ rerun.position.position_name }}</td>
+                                            <td>{{ rerun.original_election.election_name }}</td>
+                                            <td>{{ rerun.end_date|date:"M d, Y H:i" }}</td>
+                                            <td><span class="badge bg-success">Active</span></td>
+                                            <td>
+                                                <a href="{% url 'rerun_manage' rerun.id %}" class="btn btn-sm btn-primary">
+                                                    Manage
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                    
+                    <!-- Pending Reruns -->
+                    {% if pending_reruns %}
+                        <h5 class="text-warning">Pending Reruns</h5>
+                        <div class="table-responsive mb-4">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Position</th>
+                                        <th>Original Election</th>
+                                        <th>Starts</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for rerun in pending_reruns %}
+                                        <tr>
+                                            <td>{{ rerun.position.position_name }}</td>
+                                            <td>{{ rerun.original_election.election_name }}</td>
+                                            <td>{{ rerun.start_date|date:"M d, Y H:i" }}</td>
+                                            <td><span class="badge bg-warning">Pending</span></td>
+                                            <td>
+                                                <a href="{% url 'rerun_manage' rerun.id %}" class="btn btn-sm btn-primary">
+                                                    Manage
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                    
+                    <!-- Completed Reruns -->
+                    {% if completed_reruns %}
+                        <h5 class="text-secondary">Completed Reruns</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Position</th>
+                                        <th>Original Election</th>
+                                        <th>Completed</th>
+                                        <th>Winner</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for rerun in completed_reruns %}
+                                        <tr>
+                                            <td>{{ rerun.position.position_name }}</td>
+                                            <td>{{ rerun.original_election.election_name }}</td>
+                                            <td>{{ rerun.completed_at|date:"M d, Y H:i" }}</td>
+                                            <td>
+                                                {% with rerun.get_winner as winner %}
+                                                    {% if winner %}
+                                                        {{ winner.student.get_full_name }}
+                                                    {% else %}
+                                                        No winner
+                                                    {% endif %}
+                                                {% endwith %}
+                                            </td>
+                                            <td>
+                                                <a href="{% url 'rerun_manage' rerun.id %}" class="btn btn-sm btn-info">
+                                                    View
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                    
+                    {% if not active_reruns and not pending_reruns and not completed_reruns %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No rerun elections found</p>
+                            <a href="{% url 'rerun_auto_check' %}" class="btn btn-primary">
+                                Check for tied positions
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -4,37 +4,51 @@ import qrcode
 from django_otp import verify_token, user_has_device
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from .forms import CSVUploadForm
-from .models import Student, Notification
+from .models import (
+    Student, Election, Position, Candidate, Vote,
+    Notification, TiebreakLog, PushSubscription,
+    RerunElection, RerunVote
+)
 from django.db import connection
 from django.shortcuts import redirect, render
 import time
 import json
 import csv
 import io
+from datetime import datetime
+from django.views.decorators.cache import cache_control
+import os
+from django.conf import settings
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
 from django.utils import timezone
 from django.core.cache import cache
 from django.contrib.auth.hashers import make_password
+from django.core.exceptions import ValidationError
 
-from .models import Student, Election, Position, Candidate, Vote
 from .forms import (
     StudentLoginForm, ForcePasswordChangeForm,
     CSVUploadForm, ElectionForm, PositionForm,
     CandidateForm, StudentPasswordChangeForm
 )
+
 from .utils import (
     get_active_users,
     create_notification,
-    create_bulk_notifications
+    create_bulk_notifications,
+    invalidate_active_election,
+    invalidate_student_stats,
+    get_student_stats,
+    create_admin_notification, send_bulk_notifications_with_web_push,
+    send_web_push_bulk,  # Commented out - add when implemented
 )
 
 
@@ -47,7 +61,6 @@ LOCKOUT_WINDOW = 60  # seconds
 
 
 def login_view(request):
-
     if request.user.is_authenticated:
         if request.user.is_staff:
             return redirect('admin_dashboard')
@@ -60,12 +73,10 @@ def login_view(request):
         cache_key = f'login_attempts_{ip}'
         attempts = cache.get(cache_key, 0)
 
-        # ── Rate limit check ──────────────────────────────
         if attempts >= LOCKOUT_ATTEMPTS:
             messages.error(
                 request,
-                'Too many login attempts. '
-                'Please wait 1 minute before trying again.'
+                'Too many login attempts. Please wait 1 minute before trying again.'
             )
             return render(
                 request,
@@ -85,7 +96,6 @@ def login_view(request):
             )
 
             if user is not None:
-                # ── Success — clear lockout ───────────────
                 cache.delete(cache_key)
                 login(request, user)
                 messages.success(
@@ -93,9 +103,7 @@ def login_view(request):
                     f'Welcome back, {user.first_name}!'
                 )
                 return redirect('student_dashboard')
-
             else:
-                # ── Failed — increment counter ────────────
                 cache.set(
                     cache_key,
                     attempts + 1,
@@ -108,8 +116,7 @@ def login_view(request):
                     if not student.is_active:
                         messages.error(
                             request,
-                            'Your account has been deactivated. '
-                            'Please contact the administrator.'
+                            'Your account has been deactivated. Please contact the administrator.'
                         )
                     else:
                         messages.error(
@@ -119,8 +126,7 @@ def login_view(request):
                 except Student.DoesNotExist:
                     messages.error(
                         request,
-                        'You are not a registered voter. '
-                        'Please contact the administrator.'
+                        'You are not a registered voter. Please contact the administrator.'
                     )
 
     return render(request, 'student/login.html', {'form': form})
@@ -128,21 +134,17 @@ def login_view(request):
 
 def logout_view(request):
     if request.user.is_authenticated:
-        # Remove from active users tracker
         cache.delete(f'active_user_{request.user.id}')
         active_ids = cache.get('active_user_ids', set())
         active_ids.discard(request.user.id)
         cache.set('active_user_ids', active_ids, timeout=300)
 
     logout(request)
-    messages.success(
-        request, 'You have been logged out successfully.'
-    )
+    messages.success(request, 'You have been logged out successfully.')
     return redirect('login')
 
 
 def change_password_view(request):
-
     if not request.user.is_authenticated:
         return redirect('login')
 
@@ -197,13 +199,28 @@ def change_password_view(request):
 
 @login_required(login_url='login')
 def student_dashboard(request):
-
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
-    # Use filter().first() instead of .get() to avoid
-    # MultipleObjectsReturned (500) if admin accidentally
-    # has more than one active election in DB.
+    active_rerun = RerunElection.objects.filter(
+        status=Election.STATUS_ACTIVE,
+        start_date__lte=timezone.now(),
+        end_date__gte=timezone.now()
+    ).first()
+
+    if active_rerun:
+        has_voted = RerunVote.objects.filter(
+            student=request.user,
+            rerun_election=active_rerun
+        ).exists()
+
+        context = {
+            'active_rerun': active_rerun,
+            'has_voted_rerun': has_voted,
+            'election': None,
+        }
+        return render(request, 'student/dashboard.html', context)
+
     election = Election.objects.filter(
         status__in=[Election.STATUS_ACTIVE, Election.STATUS_RERUN]
     ).order_by('-created_at').first()
@@ -220,30 +237,28 @@ def student_dashboard(request):
     if not request.user.is_active:
         messages.warning(
             request,
-            'Your account has been deactivated. '
-            'You cannot vote. Please contact the administrator.'
+            'Your account has been deactivated. You cannot vote. Please contact the administrator.'
         )
 
     context = {
-        'election':        election,
+        'election': election,
         'voted_positions': voted_positions,
         'total_positions': election.positions.count() if election else 0,
-        'votes_cast':      len(voted_positions),
+        'votes_cast': len(voted_positions),
+        'active_rerun': None,
     }
     return render(request, 'student/dashboard.html', context)
 
 
 @login_required(login_url='login')
 def ballot_view(request):
-
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
     if not request.user.is_active:
         messages.error(
             request,
-            'Your account has been deactivated. '
-            'You cannot vote. Please contact the administrator.'
+            'Your account has been deactivated. You cannot vote. Please contact the administrator.'
         )
         return redirect('student_dashboard')
 
@@ -254,7 +269,6 @@ def ballot_view(request):
         messages.error(request, 'No active election at the moment.')
         return redirect('student_dashboard')
 
-    # In rerun mode, only show positions flagged for re-run
     if election.status == Election.STATUS_RERUN:
         positions = Position.objects.filter(
             election=election, is_rerun=True
@@ -292,12 +306,12 @@ def ballot_view(request):
     ]
 
     context = {
-        'election':               election,
-        'positions':              positions,
-        'voted_position_ids':     voted_position_ids,
-        'voted_candidate_ids':    voted_candidate_ids,
-        'all_voted':              all_voted,
-        'total_positions':        len(all_positions_ids),
+        'election': election,
+        'positions': positions,
+        'voted_position_ids': voted_position_ids,
+        'voted_candidate_ids': voted_candidate_ids,
+        'all_voted': all_voted,
+        'total_positions': len(all_positions_ids),
         'unvoted_positions_json': json.dumps(unvoted_positions),
     }
     return render(request, 'student/ballot.html', context)
@@ -305,15 +319,13 @@ def ballot_view(request):
 
 @login_required(login_url='login')
 def cast_vote(request):
-
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
     if not request.user.is_active:
         messages.error(
             request,
-            'Your account has been deactivated. '
-            'You cannot vote.'
+            'Your account has been deactivated. You cannot vote.'
         )
         return redirect('student_dashboard')
 
@@ -382,44 +394,40 @@ def cast_vote(request):
 
     if saved > 0:
         plural = 's' if saved != 1 else ''
-    messages.success(
-        request,
-        f'Your votes have been submitted successfully! '
-        f'{saved} vote{plural} recorded.'
-    )
-    create_notification(
-        student=request.user,
-        title='Vote Submitted Successfully',
-        message=(
-            f'Your {saved} vote{plural} for '
-            f'"{election.election_name}" have been '
-            f'recorded securely. Thank you for participating!'
-        ),
-        notif_type='success',
-    )
+        messages.success(
+            request,
+            f'Your votes have been submitted successfully! {saved} vote{plural} recorded.'
+        )
+        create_notification(
+            student=request.user,
+            title='Vote Submitted Successfully',
+            message=(
+                f'Your {saved} vote{plural} for "{election.election_name}" have been '
+                f'recorded securely. Thank you for participating!'
+            ),
+            notif_type='success',
+        )
 
-    # ── Notify admins at turnout milestones ────────────
-    from .utils import create_admin_notification
-    total_students = Student.objects.filter(is_staff=False).count()
-    voters_count = Vote.objects.filter(
-        election=election
-    ).values('student').distinct().count()
-    turnout = round((voters_count / total_students * 100), 1) \
-        if total_students > 0 else 0
+        from .utils import create_admin_notification
+        total_students = Student.objects.filter(is_staff=False).count()
+        voters_count = Vote.objects.filter(
+            election=election
+        ).values('student').distinct().count()
+        turnout = round((voters_count / total_students * 100), 1) \
+            if total_students > 0 else 0
 
-    for milestone in [25, 50, 75, 100]:
-        cache_key = f'turnout_milestone_{election.id}_{milestone}'
-        if turnout >= milestone and not cache.get(cache_key):
-            cache.set(cache_key, True, timeout=None)
-            create_admin_notification(
-                title=f'{milestone}% Turnout Reached',
-                message=(
-                    f'"{election.election_name}" has reached '
-                    f'{milestone}% voter turnout '
-                    f'({voters_count} of {total_students} students).'
-                ),
-                notif_type='success' if milestone == 100 else 'info',
-            )
+        for milestone in [25, 50, 75, 100]:
+            cache_key = f'turnout_milestone_{election.id}_{milestone}'
+            if turnout >= milestone and not cache.get(cache_key):
+                cache.set(cache_key, True, timeout=None)
+                create_admin_notification(
+                    title=f'{milestone}% Turnout Reached',
+                    message=(
+                        f'"{election.election_name}" has reached {milestone}% voter turnout '
+                        f'({voters_count} of {total_students} students).'
+                    ),
+                    notif_type='success' if milestone == 100 else 'info',
+                )
 
     if errors:
         for error in errors:
@@ -430,7 +438,6 @@ def cast_vote(request):
 
 @login_required(login_url='login')
 def student_results(request):
-
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
@@ -460,22 +467,21 @@ def student_results(request):
                 reverse=True
             )
             results.append({
-                'position':    position,
-                'candidates':  candidates,
+                'position': position,
+                'candidates': candidates,
                 'total_votes': position.total_votes,
             })
 
     context = {
-        'elections':         elections,
+        'elections': elections,
         'selected_election': selected_election,
-        'results':           results,
+        'results': results,
     }
     return render(request, 'student/results.html', context)
 
 
 @login_required(login_url='login')
 def student_profile(request):
-
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
@@ -520,9 +526,9 @@ def student_profile(request):
         voted_positions = []
 
     context = {
-        'form':            form,
-        'student':         request.user,
-        'election':        election,
+        'form': form,
+        'student': request.user,
+        'election': election,
         'voted_positions': voted_positions,
     }
     return render(request, 'student/profile.html', context)
@@ -530,12 +536,10 @@ def student_profile(request):
 
 @login_required(login_url='login')
 def student_notifications(request):
-
     if request.user.is_staff:
         return redirect('admin_dashboard')
 
     notifications = request.user.notifications.all()
-    # Do NOT auto-mark as read here — let the user explicitly mark via button or bell dropdown
 
     context = {
         'notifications': notifications,
@@ -545,7 +549,6 @@ def student_notifications(request):
 
 @login_required(login_url='login')
 def notifications_api(request):
-
     if request.user.is_staff:
         return JsonResponse({'count': 0, 'notifications': []})
 
@@ -561,10 +564,10 @@ def notifications_api(request):
         ).count(),
         'notifications': [
             {
-                'id':         n['id'],
-                'title':      n['title'],
-                'message':    n['message'],
-                'type':       n['notif_type'],
+                'id': n['id'],
+                'title': n['title'],
+                'message': n['message'],
+                'type': n['notif_type'],
                 'created_at': n['created_at'].strftime(
                     '%d %b %Y, %H:%M'
                 ),
@@ -576,18 +579,12 @@ def notifications_api(request):
 
 @login_required(login_url='login')
 def mark_notifications_read(request):
-    """Mark all unread notifications as read.
-    - POST from AJAX (bell dropdown): returns JSON
-    - POST from HTML form (notifications page): redirects back
-    """
     if not request.user.is_staff:
         request.user.notifications.filter(is_read=False).update(is_read=True)
 
-    # If request came from the notifications page (form submit), redirect back
     if request.headers.get('X-CSRFToken') and not request.headers.get('X-Requested-With'):
         return redirect('student_notifications')
 
-    # AJAX call
     return JsonResponse({'ok': True})
 
 
@@ -595,19 +592,15 @@ def mark_notifications_read(request):
 
 @login_required(login_url='login')
 def push_vapid_public_key(request):
-    """Return the VAPID public key so the SW can subscribe."""
     from django.conf import settings as dj_settings
     return JsonResponse({'publicKey': dj_settings.VAPID_PUBLIC_KEY})
 
 
 @login_required(login_url='login')
 def push_subscribe(request):
-    """Student browser posts its push subscription here."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
-    import json
-    from .models import PushSubscription
     try:
         data = json.loads(request.body)
         endpoint = data['endpoint']
@@ -620,8 +613,8 @@ def push_subscribe(request):
         endpoint=endpoint,
         defaults={
             'student': request.user,
-            'p256dh':  p256dh,
-            'auth':    auth,
+            'p256dh': p256dh,
+            'auth': auth,
         }
     )
     return JsonResponse({'ok': True})
@@ -629,12 +622,9 @@ def push_subscribe(request):
 
 @login_required(login_url='login')
 def push_unsubscribe(request):
-    """Remove a push subscription (called when user revokes permission)."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
-    import json
-    from .models import PushSubscription
     try:
         data = json.loads(request.body)
         PushSubscription.objects.filter(endpoint=data['endpoint']).delete()
@@ -649,7 +639,6 @@ def push_unsubscribe(request):
 
 @staff_member_required(login_url='login')
 def admin_dashboard(request):
-
     total_students = Student.objects.filter(is_staff=False).count()
     total_elections = Election.objects.count()
     total_candidates = Candidate.objects.count()
@@ -676,15 +665,15 @@ def admin_dashboard(request):
     active_users = get_active_users()
 
     context = {
-        'total_students':     total_students,
-        'total_elections':    total_elections,
-        'total_candidates':   total_candidates,
-        'active_election':    active_election,
-        'total_votes':        total_votes,
-        'voters_count':       voters_count,
-        'turnout':            turnout,
-        'recent_elections':   recent_elections,
-        'active_users':       active_users,
+        'total_students': total_students,
+        'total_elections': total_elections,
+        'total_candidates': total_candidates,
+        'active_election': active_election,
+        'total_votes': total_votes,
+        'voters_count': voters_count,
+        'turnout': turnout,
+        'recent_elections': recent_elections,
+        'active_users': active_users,
         'active_users_count': len(active_users),
     }
     return render(request, 'admin/dashboard.html', context)
@@ -707,7 +696,6 @@ def admin_election_create(request):
         form = ElectionForm(request.POST)
         if form.is_valid():
             election = form.save()
-            from .utils import create_admin_notification
             create_admin_notification(
                 title='New Election Created',
                 message=f'"{election.election_name}" was created by {request.user.get_full_name()}.',
@@ -753,42 +741,30 @@ def admin_election_delete(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_election_activate(request, pk):
-    from .utils import invalidate_active_election
     election = get_object_or_404(Election, pk=pk)
 
-    if Election.objects.filter(
-        status=Election.STATUS_ACTIVE
-    ).exists():
+    if Election.objects.filter(status=Election.STATUS_ACTIVE).exists():
         messages.error(
             request,
-            'Another election is already active. '
-            'Please close it first.'
+            'Another election is already active. Please close it first.'
         )
         return redirect('admin_elections')
 
     election.status = Election.STATUS_ACTIVE
     election.save()
-    invalidate_active_election()   # ← clear election cache
+    invalidate_active_election()
 
     students = Student.objects.filter(is_staff=False, is_active=True)
-    create_bulk_notifications(
-        students=students,
-        title='Election Started',
-        message=(
-            f'"{election.election_name}" is now open for voting. '
-            f'Vote before '
-            f'{election.end_date.strftime("%d %B %Y at %I:%M %p")}.'
-        ),
-        notif_type='info',
-    )
-    # ── Web Push (phone/desktop OS notification) ──────────
-    from .utils import send_web_push_bulk
-    send_web_push_bulk(
+
+    # Send both in-app and web push notifications
+    send_bulk_notifications_with_web_push(
         students=students,
         title=f'🗳️ {election.election_name} — Voting Open!',
-        body=f'Vote before {election.end_date.strftime("%d %B at %I:%M %p")}. Tap to vote now.',
-        url='/vote/',
+        message=f'Vote before {election.end_date.strftime("%d %B at %I:%M %p")}.',
+        notif_type='info',
+        url='/vote/'
     )
+
     messages.success(
         request,
         f'"{election.election_name}" is now active.'
@@ -798,14 +774,12 @@ def admin_election_activate(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_election_close(request, pk):
-    from .utils import invalidate_active_election, create_admin_notification
     election = get_object_or_404(Election, pk=pk)
     election.status = Election.STATUS_CLOSED
     election.save()
     invalidate_active_election()
     cache.delete(f'results_api_{pk}')
 
-    # ── Auto-detect ties and notify admin ─────────────────
     tied_position_names = []
     for position in election.positions.prefetch_related('candidates__student'):
         candidates = sorted(
@@ -826,8 +800,7 @@ def admin_election_close(request, pk):
             title=f'⚡ Tie Detected — {election.election_name}',
             message=(
                 f'{len(tied_position_names)} tied position(s) need a re-run: '
-                f'{tie_list}. '
-                f'Go to Elections → ⚖️ Detect Ties to schedule the re-run.'
+                f'{tie_list}. Go to Elections → ⚖️ Detect Ties to schedule the re-run.'
             ),
             notif_type='warning',
         )
@@ -842,9 +815,8 @@ def admin_election_close(request, pk):
             f'"{election.election_name}" has been closed.'
         )
 
-    # Notify all students
     students = Student.objects.filter(is_staff=False, is_active=True)
-    create_bulk_notifications(
+    send_bulk_notifications_with_web_push(
         students=students,
         title='Election Closed',
         message=(
@@ -853,6 +825,7 @@ def admin_election_close(request, pk):
                if tied_position_names else '')
         ),
         notif_type='warning',
+        url='/results/'
     )
     return redirect('admin_elections')
 
@@ -884,18 +857,18 @@ def admin_notifications_api(request):
         ).count(),
         'notifications': [
             {
-                'id':         n['id'],
-                'title':      n['title'],
-                'message':    n['message'],
-                'type':       n['notif_type'],
+                'id': n['id'],
+                'title': n['title'],
+                'message': n['message'],
+                'type': n['notif_type'],
                 'created_at': n['created_at'].strftime('%d %b %Y, %H:%M'),
             }
             for n in unread
         ],
     })
 
-# ── Positions ─────────────────────────────────────────────
 
+# ── Positions ─────────────────────────────────────────────
 
 @staff_member_required(login_url='login')
 def admin_positions(request):
@@ -1019,8 +992,6 @@ def admin_candidate_delete(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_students(request):
-    from .utils import get_student_stats
-
     students = Student.objects.filter(
         is_staff=False
     ).only(
@@ -1037,7 +1008,6 @@ def admin_students(request):
             students.filter(email__icontains=query)
         )
 
-    # Use cached stats — avoids 3 extra DB queries on every page load
     stats = get_student_stats()
 
     paginator = Paginator(students, 25)
@@ -1045,10 +1015,10 @@ def admin_students(request):
     students = paginator.get_page(page)
 
     return render(request, 'admin/students.html', {
-        'students':               students,
-        'query':                  query,
-        'active_count':           stats['active'],
-        'inactive_count':         stats['inactive'],
+        'students': students,
+        'query': query,
+        'active_count': stats['active'],
+        'inactive_count': stats['inactive'],
         'default_password_count': stats['default_password'],
     })
 
@@ -1098,7 +1068,6 @@ def admin_students_bulk_action(request):
 
     from django.contrib.admin.models import LogEntry
 
-    # ── Delete All ────────────────────────────────────────
     if action == 'delete_all':
         try:
             all_ids = list(
@@ -1113,7 +1082,6 @@ def admin_students_bulk_action(request):
                 deleted, _ = Student.objects.filter(
                     is_staff=False
                 ).delete()
-                from .utils import invalidate_student_stats
                 invalidate_student_stats()
                 messages.success(
                     request,
@@ -1125,7 +1093,6 @@ def admin_students_bulk_action(request):
             messages.error(request, f'Error deleting students: {str(e)}')
         return redirect('admin_students')
 
-    # ── Select all pages action ───────────────────────────
     if select_all_pages:
         students = Student.objects.filter(is_staff=False)
     else:
@@ -1143,32 +1110,19 @@ def admin_students_bulk_action(request):
         messages.error(request, 'No valid students found.')
         return redirect('admin_students')
 
-    # ── Bulk Activate ─────────────────────────────────────
     if action == 'activate':
         students.update(is_active=True)
         messages.success(
             request,
             f'{count} student(s) activated successfully.'
         )
-
-    # ── Bulk Deactivate ───────────────────────────────────
     elif action == 'deactivate':
         students.update(is_active=False)
         messages.success(
             request,
             f'{count} student(s) deactivated successfully.'
         )
-
-    # ── Bulk Reset Password ───────────────────────────────
     elif action == 'reset_password':
-        updated = 0
-        for student in students.iterator(chunk_size=100):
-            student.password = make_password(
-                str(student.admission_number)
-            )
-            student.password_changed = False
-            updated += 1
-        # Bulk update in one query
         Student.objects.filter(
             pk__in=list(students.values_list('pk', flat=True))
         ).update(password_changed=False)
@@ -1176,8 +1130,6 @@ def admin_students_bulk_action(request):
             request,
             f'Passwords reset for {count} student(s).'
         )
-
-    # ── Bulk Delete ───────────────────────────────────────
     elif action == 'delete':
         try:
             ids = list(students.values_list('id', flat=True))
@@ -1192,12 +1144,10 @@ def admin_students_bulk_action(request):
                 request,
                 f'Error deleting students: {str(e)}'
             )
-
     else:
         messages.error(
             request,
-            f'Unknown action: "{action}". '
-            f'Please try again.'
+            f'Unknown action: "{action}". Please try again.'
         )
 
     return redirect('admin_students')
@@ -1205,8 +1155,6 @@ def admin_students_bulk_action(request):
 
 @staff_member_required(login_url='login')
 def admin_student_create(request):
-    from .utils import invalidate_student_stats
-
     if request.method == 'POST':
         first_name = request.POST.get('first_name', '').strip()
         last_name = request.POST.get('last_name', '').strip()
@@ -1253,13 +1201,11 @@ def admin_student_create(request):
             password_changed=False,
         )
 
-        # Invalidate stats cache immediately
         invalidate_student_stats()
 
         messages.success(
             request,
-            f'{first_name} {last_name} added successfully. '
-            f'Default password is their admission number.'
+            f'{first_name} {last_name} added successfully. Default password is their admission number.'
         )
     return redirect('admin_students')
 
@@ -1279,7 +1225,6 @@ def admin_student_delete(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_students_delete_all(request):
-    """Standalone delete-all endpoint (kept for direct URL use)."""
     if request.method == 'POST':
         from django.contrib.admin.models import LogEntry
         try:
@@ -1293,7 +1238,6 @@ def admin_students_delete_all(request):
                 deleted, _ = Student.objects.filter(
                     is_staff=False
                 ).delete()
-                from .utils import invalidate_student_stats
                 invalidate_student_stats()
                 messages.success(
                     request,
@@ -1306,20 +1250,13 @@ def admin_students_delete_all(request):
     return redirect('admin_students')
 
 
-# ── Tuning constants ──────────────────────────────────────────────────────────
-# hard row cap — prevents memory bombs     # parallel bcrypt threads; tune to your CPU core count
+# ── CSV Upload ─────────────────────────────────────────────
+
 MAX_CSV_ROWS = 7_000_000
-SQL_BATCH_SIZE = 1_000_000    # rows per INSERT statement
-# ─────────────────────────────────────────────────────────────────────────────
+SQL_BATCH_SIZE = 1_000_000
 
 
 def _bulk_hash_passwords(raw_rows):
-    """
-    Hash using MD5 — fast and throwaway.
-    Students must change password on first login (password_changed=False).
-    MD5 is acceptable here because the password is public knowledge
-    (it's their admission number) and it expires on first login.
-    """
     from django.contrib.auth.hashers import make_password
     return [
         make_password(str(row[0]), hasher='md5')
@@ -1328,21 +1265,10 @@ def _bulk_hash_passwords(raw_rows):
 
 
 def _bulk_insert_students(rows):
-    """
-    Low-level parameterised INSERT using Django's raw DB cursor.
-    Bypasses the ORM model layer entirely — no Python object
-    construction, no signal dispatch, no field validation overhead.
-
-    rows: list of tuples matching the INSERT column order below.
-    Returns: number of rows actually inserted.
-    """
     if not rows:
         return 0
 
-    # Build a single INSERT … ON DUPLICATE KEY UPDATE (MySQL)
-    # or INSERT … ON CONFLICT DO NOTHING (PostgreSQL/SQLite).
-    # We detect which DB is in use from the connection vendor.
-    vendor = connection.vendor   # 'mysql' | 'postgresql' | 'sqlite'
+    vendor = connection.vendor
 
     columns = (
         'admission_number',
@@ -1366,8 +1292,6 @@ def _bulk_insert_students(rows):
             batch = rows[batch_start: batch_start + SQL_BATCH_SIZE]
 
             if vendor == 'mysql':
-                # INSERT IGNORE skips duplicate admission_number / email
-                # without raising an error — fastest MySQL path.
                 sql = (
                     f'INSERT IGNORE INTO students ({col_str}) '
                     f'VALUES ({placeholder})'
@@ -1379,13 +1303,11 @@ def _bulk_insert_students(rows):
                     f'ON CONFLICT (admission_number) DO NOTHING'
                 )
             else:
-                # SQLite (test runner / dev fallback)
                 sql = (
                     f'INSERT OR IGNORE INTO students ({col_str}) '
                     f'VALUES ({placeholder})'
                 )
 
-            # executemany sends the whole batch in one round-trip
             cursor.executemany(sql, batch)
             inserted += cursor.rowcount
 
@@ -1399,14 +1321,12 @@ def admin_upload_csv(request):
     if request.method == 'POST':
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
-
             t_start = time.perf_counter()
 
             csv_file = request.FILES['csv_file']
             decoded = csv_file.read().decode('utf-8')
             reader = csv.DictReader(io.StringIO(decoded))
 
-            # ── Step 1: fetch existing keys in ONE query ──────────
             existing_admissions = set(
                 Student.objects.values_list('admission_number', flat=True)
             )
@@ -1414,8 +1334,7 @@ def admin_upload_csv(request):
                 Student.objects.values_list('email', flat=True)
             )
 
-            # ── Step 2: parse & deduplicate — pure Python, fast ───
-            raw_rows = []    # [(admission_number_int, first, last, email)]
+            raw_rows = []
             seen_in_csv = set()
             skipped = 0
             errors = []
@@ -1426,8 +1345,7 @@ def admin_upload_csv(request):
                 if row_count > MAX_CSV_ROWS:
                     messages.error(
                         request,
-                        f'CSV exceeds {MAX_CSV_ROWS} rows. '
-                        'Split into smaller files.'
+                        f'CSV exceeds {MAX_CSV_ROWS} rows. Split into smaller files.'
                     )
                     return redirect('admin_students')
 
@@ -1437,17 +1355,14 @@ def admin_upload_csv(request):
                     last_name = row['last_name'].strip()[:100]
                     email = row['email'].strip()[:254].lower()
 
-                    # Skip if already in DB
                     if admission_number in existing_admissions:
                         skipped += 1
                         continue
 
-                    # Skip duplicate email in DB
                     if email in existing_emails:
                         skipped += 1
                         continue
 
-                    # Skip duplicate within this CSV
                     if admission_number in seen_in_csv:
                         skipped += 1
                         continue
@@ -1460,77 +1375,61 @@ def admin_upload_csv(request):
                 except KeyError as e:
                     errors.append(
                         f'Row {row_num}: Missing column {e}. '
-                        'Headers must be: admission_number, '
-                        'first_name, last_name, email'
+                        'Headers must be: admission_number, first_name, last_name, email'
                     )
                 except (ValueError, TypeError) as e:
                     errors.append(f'Row {row_num}: {e}')
 
             t_parse = time.perf_counter()
 
-            # ── Step 3: hash passwords in PARALLEL ────────────────
-            # bcrypt is CPU-bound but releases the GIL enough that
-            # ThreadPoolExecutor gives a real 4–8× speedup on multi-core.
-            #
-            # We hash str(admission_number) for each student — this is
-            # the same default password logic as before, just parallelised.
-            # ── Step 3: hash passwords FAST ───────────────────────
             hashed = _bulk_hash_passwords(raw_rows)
 
             t_hash = time.perf_counter()
 
-            # ── Step 4: assemble final row tuples ─────────────────
             from django.utils import timezone
             now = timezone.now()
 
             db_rows = [
                 (
-                    raw_rows[i][0],   # admission_number
-                    raw_rows[i][1],   # first_name
-                    raw_rows[i][2],   # last_name
-                    raw_rows[i][3],   # email
-                    hashed[i],        # password  (hashed)
-                    False,            # password_changed
-                    True,             # is_active
-                    False,            # is_staff
-                    False,            # is_superuser
-                    now,              # date_joined
+                    raw_rows[i][0],
+                    raw_rows[i][1],
+                    raw_rows[i][2],
+                    raw_rows[i][3],
+                    hashed[i],
+                    False,
+                    True,
+                    False,
+                    False,
+                    now,
                 )
                 for i in range(len(raw_rows))
             ]
 
-            # ── Step 5: raw bulk INSERT ────────────────────────────
             created = _bulk_insert_students(db_rows)
 
             t_done = time.perf_counter()
 
-            # ── Timing breakdown (shown in success message) ────────
             t_total = t_done - t_start
             t_h_sec = t_hash - t_parse
             t_w_sec = t_done - t_hash
 
-            # ── User feedback ──────────────────────────────────────
             if created > 0:
                 messages.success(
                     request,
                     f'Successfully imported {created} student(s) '
-                    f'in {t_total:.1f}s '
-                    f'(hashing: {t_h_sec:.1f}s, '
-                    f'DB write: {t_w_sec:.2f}s).'
+                    f'in {t_total:.1f}s (hashing: {t_h_sec:.1f}s, DB write: {t_w_sec:.2f}s).'
                 )
             if skipped > 0:
                 messages.warning(
                     request,
-                    f'{skipped} student(s) skipped — '
-                    'already exist or duplicates in CSV.'
+                    f'{skipped} student(s) skipped — already exist or duplicates in CSV.'
                 )
             for error in errors[:5]:
                 messages.error(request, error)
             if len(errors) > 5:
                 messages.error(
                     request,
-                    f'...and {len(errors) - 5} more errors. '
-                    'Check your CSV format.'
+                    f'...and {len(errors) - 5} more errors. Check your CSV format.'
                 )
 
             return redirect('admin_students')
@@ -1547,8 +1446,7 @@ def admin_reset_password(request, pk):
         student.save()
         messages.success(
             request,
-            f'Password for {student.get_full_name()} reset to '
-            f'their admission number.'
+            f'Password for {student.get_full_name()} reset to their admission number.'
         )
         return redirect('admin_students')
     return render(request, 'admin/student_reset_password.html', {
@@ -1558,7 +1456,6 @@ def admin_reset_password(request, pk):
 
 @staff_member_required(login_url='login')
 def admin_toggle_student(request, pk):
-    from .utils import invalidate_student_stats
     student = get_object_or_404(Student, pk=pk, is_staff=False)
     if request.method == 'POST':
         student.is_active = not student.is_active
@@ -1568,7 +1465,7 @@ def admin_toggle_student(request, pk):
             request,
             f'{student.get_full_name()} has been {status}.'
         )
-        invalidate_student_stats()   # ← add this
+        invalidate_student_stats()
     return redirect('admin_students')
 
 
@@ -1589,11 +1486,11 @@ def admin_live_results(request, election_id):
         if total_students > 0 else 0
 
     context = {
-        'election':       election,
-        'positions':      positions,
+        'election': election,
+        'positions': positions,
         'total_students': total_students,
-        'voters_count':   voters_count,
-        'turnout':        turnout,
+        'voters_count': voters_count,
+        'turnout': turnout,
     }
     return render(request, 'admin/live_results.html', context)
 
@@ -1619,7 +1516,6 @@ def admin_results_api(request, election_id):
         )
         pos_total = Vote.objects.filter(position=position).count()
 
-        # ── Tie detection — no auto winner ───────────────
         winner_id = None
         is_tied = False
         tied_ids = []
@@ -1631,21 +1527,21 @@ def admin_results_api(request, election_id):
                 winner_id = candidates[0].id
 
         data.append({
-            'position_id':   position.id,
+            'position_id': position.id,
             'position_name': position.position_name,
-            'total_votes':   pos_total,
-            'is_tied':       is_tied,
-            'winner_id':     winner_id,
+            'total_votes': pos_total,
+            'is_tied': is_tied,
+            'winner_id': winner_id,
             'candidates': [
                 {
-                    'id':         c.id,
-                    'name':       c.student.get_full_name(),
-                    'initials':   c.get_initials(),
-                    'color':      c.get_avatar_color(),
-                    'votes':      c.vote_count,
+                    'id': c.id,
+                    'name': c.student.get_full_name(),
+                    'initials': c.get_initials(),
+                    'color': c.get_avatar_color(),
+                    'votes': c.vote_count,
                     'percentage': c.vote_percentage,
-                    'is_winner':  (not is_tied and c.id == winner_id),
-                    'is_tied':    (c.id in tied_ids),
+                    'is_winner': (not is_tied and c.id == winner_id),
+                    'is_tied': (c.id in tied_ids),
                 }
                 for c in candidates
             ]
@@ -1659,12 +1555,12 @@ def admin_results_api(request, election_id):
         if total_students > 0 else 0
 
     result = {
-        'election_name':  election.election_name,
-        'total_votes':    Vote.objects.filter(election=election).count(),
-        'voters_count':   voters_count,
+        'election_name': election.election_name,
+        'total_votes': Vote.objects.filter(election=election).count(),
+        'voters_count': voters_count,
         'total_students': total_students,
-        'turnout':        turnout,
-        'positions':      data,
+        'turnout': turnout,
+        'positions': data,
     }
 
     cache.set(cache_key, result, timeout=5)
@@ -1707,13 +1603,13 @@ def admin_reports(request, election_id):
                 winner = candidates[0]
 
         results.append({
-            'position':         position,
-            'candidates':       candidates,
-            'winner':           winner,
-            'total_votes':      pos_total,
-            'is_tied':          is_tied,
-            'tied_candidates':  tied_candidates,
-            'tiebreak_info':    tiebreak_info,
+            'position': position,
+            'candidates': candidates,
+            'winner': winner,
+            'total_votes': pos_total,
+            'is_tied': is_tied,
+            'tied_candidates': tied_candidates,
+            'tiebreak_info': tiebreak_info,
         })
 
     total_students = Student.objects.filter(is_staff=False).count()
@@ -1724,11 +1620,11 @@ def admin_reports(request, election_id):
         if total_students > 0 else 0
 
     context = {
-        'election':       election,
-        'results':        results,
+        'election': election,
+        'results': results,
         'total_students': total_students,
-        'voters_count':   voters_count,
-        'turnout':        turnout,
+        'voters_count': voters_count,
+        'turnout': turnout,
     }
     return render(request, 'admin/reports.html', context)
 
@@ -1749,8 +1645,7 @@ def export_pdf(request, election_id):
     if election.status != Election.STATUS_CLOSED:
         messages.error(
             request,
-            'Reports can only be exported after '
-            'the election is closed.'
+            'Reports can only be exported after the election is closed.'
         )
         return redirect('admin_reports', election_id=election_id)
 
@@ -1786,9 +1681,7 @@ def export_pdf(request, election_id):
 
     elements.append(
         Paragraph(
-            f'Total Students: {total_students} | '
-            f'Voted: {voters_count} | '
-            f'Turnout: {turnout}%',
+            f'Total Students: {total_students} | Voted: {voters_count} | Turnout: {turnout}%',
             styles['Normal']
         )
     )
@@ -1814,13 +1707,6 @@ def export_pdf(request, election_id):
         elements.append(
             Paragraph(position.position_name, styles['Heading3'])
         )
-        elements.append(
-            Paragraph(
-                f'{"⚡ TIE — Re-run required: " + ", ".join(c.student.get_full_name() for c in tied_cands) if is_tied else ("Winner: " + winner.student.get_full_name() if winner else "No votes cast")}'
-                if winner else 'No votes cast.',
-                styles['Normal']
-            )
-        )
         elements.append(Spacer(1, 8))
 
         table_data = [['#', 'Candidate', 'Adm No', 'Votes', '%']]
@@ -1837,20 +1723,20 @@ def export_pdf(request, election_id):
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0),
              colors.HexColor('#166534')),
-            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
-            ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE',   (0, 0), (-1, 0), 10),
-            ('ALIGN',      (0, 0), (-1, 0), 'CENTER'),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('BACKGROUND', (0, 1), (-1, 1),
              colors.HexColor('#dcfce7')),
-            ('FONTNAME',   (0, 1), (-1, 1), 'Helvetica-Bold'),
-            ('FONTSIZE',   (0, 1), (-1, -1), 9),
+            ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
             ('ROWBACKGROUNDS', (0, 2), (-1, -1),
              [colors.white, colors.HexColor('#f0fdf4')]),
-            ('GRID',       (0, 0), (-1, -1),
+            ('GRID', (0, 0), (-1, -1),
              0.5, colors.HexColor('#d1fae5')),
-            ('PADDING',    (0, 0), (-1, -1), 7),
-            ('ALIGN',      (2, 1), (-1, -1), 'CENTER'),
+            ('PADDING', (0, 0), (-1, -1), 7),
+            ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
         ]))
         elements.append(table)
         elements.append(Spacer(1, 20))
@@ -1858,11 +1744,9 @@ def export_pdf(request, election_id):
     doc.build(elements)
     buffer.seek(0)
 
-    from django.http import HttpResponse
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = (
-        f'attachment; '
-        f'filename="kuravote_results_{election_id}.pdf"'
+        f'attachment; filename="kuravote_results_{election_id}.pdf"'
     )
     return response
 
@@ -1873,7 +1757,6 @@ def export_excel(request, election_id):
     from openpyxl.styles import (
         Font, PatternFill, Alignment, Border, Side
     )
-    from django.http import HttpResponse
 
     election = get_object_or_404(Election, pk=election_id)
     positions = Position.objects.filter(election=election)
@@ -1881,8 +1764,7 @@ def export_excel(request, election_id):
     if election.status != Election.STATUS_CLOSED:
         messages.error(
             request,
-            'Reports can only be exported after '
-            'the election is closed.'
+            'Reports can only be exported after the election is closed.'
         )
         return redirect('admin_reports', election_id=election_id)
 
@@ -2062,8 +1944,7 @@ def export_excel(request, election_id):
         )
     )
     response['Content-Disposition'] = (
-        f'attachment; '
-        f'filename="kuravote_results_{election_id}.xlsx"'
+        f'attachment; filename="kuravote_results_{election_id}.xlsx"'
     )
     return response
 
@@ -2108,7 +1989,6 @@ def admin_settings(request):
                 settings_obj.system_name = system_name
             settings_obj.institution_name = institution_name
             settings_obj.save()
-            # Update existing unconfirmed OTP device names
             from django_otp.plugins.otp_totp.models import TOTPDevice
             TOTPDevice.objects.filter(
                 confirmed=False
@@ -2144,7 +2024,6 @@ def admin_settings(request):
             if font_family in valid_ff:
                 settings_obj.font_family = font_family
 
-            # Custom colour pickers (only meaningful when theme == 'custom')
             import re
             hex_re = re.compile(r'^#[0-9a-fA-F]{6}$')
             for field in ('primary_color', 'sidebar_color', 'accent_color'):
@@ -2152,7 +2031,6 @@ def admin_settings(request):
                 if hex_re.match(val):
                     setattr(settings_obj, field, val)
 
-            # Custom CSS — basic sanitisation (strip <script> tags)
             import html
             safe_css = custom_css.replace(
                 '<script', '').replace('</script', '')
@@ -2163,28 +2041,24 @@ def admin_settings(request):
 
         return redirect('admin_settings')
 
-    from .models import Student
     total_students = Student.objects.filter(is_staff=False).count()
     total_elections = Election.objects.count()
 
-    # (value, label, sidebar_hex, primary_hex, light_bg_hex)
     theme_options = [
-        ('green',  'Green',  '#14532d', '#16a34a', '#f0fdf4'),
-        ('blue',   'Blue',   '#1e3a8a', '#1d4ed8', '#eff6ff'),
+        ('green', 'Green', '#14532d', '#16a34a', '#f0fdf4'),
+        ('blue', 'Blue', '#1e3a8a', '#1d4ed8', '#eff6ff'),
         ('purple', 'Purple', '#4c1d95', '#7c3aed', '#f5f3ff'),
-        ('dark',   'Dark',   '#0f172a', '#22d3ee', '#1e293b'),
+        ('dark', 'Dark', '#0f172a', '#22d3ee', '#1e293b'),
         ('custom', 'Custom', settings_obj.sidebar_color,
          settings_obj.primary_color, '#f8fafc'),
     ]
-    # (value, label, css_font_stack)
     font_options = [
-        ('dmsans', 'DM Sans',    "'DM Sans', system-ui, sans-serif"),
-        ('inter',  'Inter',      "'Inter', system-ui, sans-serif"),
-        ('poppins', 'Poppins',    "'Poppins', system-ui, sans-serif"),
-        ('roboto', 'Roboto',     "'Roboto', system-ui, sans-serif"),
-        ('system', 'System UI',  "system-ui, -apple-system, sans-serif"),
+        ('dmsans', 'DM Sans', "'DM Sans', system-ui, sans-serif"),
+        ('inter', 'Inter', "'Inter', system-ui, sans-serif"),
+        ('poppins', 'Poppins', "'Poppins', system-ui, sans-serif"),
+        ('roboto', 'Roboto', "'Roboto', system-ui, sans-serif"),
+        ('system', 'System UI', "system-ui, -apple-system, sans-serif"),
     ]
-    # (value, label)
     size_options = [
         ('sm', 'Small'),
         ('md', 'Medium'),
@@ -2193,29 +2067,24 @@ def admin_settings(request):
     ]
 
     context = {
-        'settings_obj':    settings_obj,
-        'total_students':  total_students,
+        'settings_obj': settings_obj,
+        'total_students': total_students,
         'total_elections': total_elections,
-        'theme_options':   theme_options,
-        'font_options':    font_options,
-        'size_options':    size_options,
+        'theme_options': theme_options,
+        'font_options': font_options,
+        'size_options': size_options,
     }
     return render(request, 'admin/settings.html', context)
 
 
-# ── Student Search API (for candidate registration) ────────
+# ── Student Search API ─────────────────────────────────────
 
 @staff_member_required(login_url='login')
 def admin_student_search_api(request):
-    """AJAX endpoint — returns students matching a search query.
-    Used by the candidate registration form to avoid loading
-    170 000 options in a <select> dropdown.
-    """
     q = request.GET.get('q', '').strip()
     if len(q) < 2:
         return JsonResponse({'results': []})
 
-    from django.db.models import Q
     students = Student.objects.filter(
         is_staff=False, is_active=True
     ).filter(
@@ -2239,10 +2108,6 @@ def admin_student_search_api(request):
 # ── Tiebreak Resolution ────────────────────────────────────
 
 def _detect_tie(candidates):
-    """
-    Returns (is_tied, tied_candidates, top_votes).
-    Never picks a winner — ties must be resolved via admin re-run.
-    """
     if not candidates:
         return False, [], 0
     top_votes = candidates[0].vote_count
@@ -2256,7 +2121,6 @@ def _detect_tie(candidates):
 
 @staff_member_required(login_url='login')
 def admin_tiebreak_log(request):
-    from .models import TiebreakLog
     logs = TiebreakLog.objects.select_related(
         'position', 'election'
     ).order_by('-resolved_at')
@@ -2267,14 +2131,13 @@ def admin_tiebreak_log(request):
 
 @staff_member_required(login_url='login')
 def admin_detect_ties(request, election_id):
-    """Scan a closed election for tied positions and present them
-    to the admin for re-run scheduling."""
     election = get_object_or_404(Election, pk=election_id)
     if election.status not in (Election.STATUS_CLOSED,
                                Election.STATUS_ACTIVE,
                                Election.STATUS_RERUN):
         messages.error(
-            request, 'Tie detection only available on active, closed, or rerun elections.')
+            request, 'Tie detection only available on active, closed, or rerun elections.'
+        )
         return redirect('admin_elections')
 
     tied_positions = []
@@ -2292,24 +2155,21 @@ def admin_detect_ties(request, election_id):
         tied = [c for c in candidates if c.vote_count == top_votes]
         if len(tied) > 1:
             tied_positions.append({
-                'position':   position,
+                'position': position,
                 'tied_count': len(tied),
                 'vote_count': top_votes,
                 'candidates': tied,
-                'is_rerun':   position.is_rerun,
+                'is_rerun': position.is_rerun,
             })
 
     return render(request, 'admin/detect_ties.html', {
-        'election':       election,
+        'election': election,
         'tied_positions': tied_positions,
     })
 
 
 @staff_member_required(login_url='login')
 def admin_start_rerun(request, election_id):
-    """Admin marks selected tied positions for re-run and sets election
-    status to STATUS_RERUN. Votes on non-tied positions are preserved.
-    Students can only vote on the rerun positions."""
     if request.method != 'POST':
         return redirect('admin_elections')
 
@@ -2318,25 +2178,20 @@ def admin_start_rerun(request, election_id):
 
     if not position_ids:
         messages.error(
-            request, 'Please select at least one position for re-run.')
+            request, 'Please select at least one position for re-run.'
+        )
         return redirect('admin_detect_ties', election_id=election_id)
 
-    # Get position names for the notification message
     rerun_positions = Position.objects.filter(
         pk__in=position_ids, election=election
     )
     position_names = ', '.join(p.position_name for p in rerun_positions)
 
-    # Mark positions as rerun
     rerun_positions.update(is_rerun=True)
 
-    # Delete only votes for the rerun positions so students can re-vote
-    Vote.objects.filter(
-        election=election,
-        position_id__in=position_ids
-    ).delete()
+    Vote.objects.filter(election=election,
+                        position_id__in=position_ids).delete()
 
-    # Set election to RERUN status
     election.status = Election.STATUS_RERUN
     election.announcement = (
         '⚡ A tie was detected in this election. '
@@ -2345,7 +2200,6 @@ def admin_start_rerun(request, election_id):
     )
     election.save()
 
-    # Notify ALL active students (in-app + web push)
     students = Student.objects.filter(is_staff=False, is_active=True)
     create_bulk_notifications(
         students=students,
@@ -2353,17 +2207,9 @@ def admin_start_rerun(request, election_id):
         message=(
             f'A tie was detected in "{election.election_name}". '
             f'A re-run vote is now open for: {position_names}. '
-            f'Please log in and cast your vote again for '
-            f'{"these positions" if len(position_ids) > 1 else "this position"}.'
+            f'Please log in and cast your vote again.'
         ),
         notif_type='warning',
-    )
-    from .utils import send_web_push_bulk
-    send_web_push_bulk(
-        students=students,
-        title='⚡ Tie Re-run — Vote Again!',
-        body=f'A tie in "{election.election_name}" needs your vote. Tap to vote on: {position_names}.',
-        url='/vote/',
     )
 
     n = len(position_ids)
@@ -2378,7 +2224,6 @@ def admin_start_rerun(request, election_id):
 
 @staff_member_required(login_url='login')
 def admin_close_rerun(request, election_id):
-    """Admin closes the rerun phase and finalises results."""
     if request.method != 'POST':
         return redirect('admin_elections')
 
@@ -2387,13 +2232,11 @@ def admin_close_rerun(request, election_id):
         messages.error(request, 'Election is not in re-run status.')
         return redirect('admin_elections')
 
-    # Clear the rerun flags
     election.positions.update(is_rerun=False)
     election.status = Election.STATUS_CLOSED
     election.announcement = ''
     election.save()
 
-    # Notify all students — in-app + web push
     students = Student.objects.filter(is_staff=False, is_active=True)
     create_bulk_notifications(
         students=students,
@@ -2404,37 +2247,407 @@ def admin_close_rerun(request, election_id):
         ),
         notif_type='success',
     )
-    from .utils import send_web_push_bulk
-    send_web_push_bulk(
-        students=students,
-        title='🏆 Final Results Available!',
-        body=f'The re-run for "{election.election_name}" is complete. Tap to see the winners.',
-        url='/results/',
-    )
 
     messages.success(
         request,
-        'Re-run closed. Election is now fully closed. '
-        'View final results in Reports.'
+        'Re-run closed. Election is now fully closed. View final results in Reports.'
     )
     return redirect('admin_elections')
+
+
+# ── Enhanced Rerun Management ─────────────────────────────────
+
+def send_rerun_notifications(rerun, action):
+    """Send notifications to students about rerun with web push"""
+    students = Student.objects.filter(is_active=True)
+
+    if action == 'created':
+        title = "🔄 Rerun Election Scheduled"
+        message = (
+            f"A rerun for {rerun.position.position_name} has been scheduled.\n"
+            f"📅 Date: {rerun.start_date.strftime('%B %d, %Y')}\n"
+            f"⏰ Time: {rerun.start_date.strftime('%I:%M %p')}\n"
+            f"Please log in to cast your vote."
+        )
+        notif_type = Notification.TYPE_INFO
+        url = '/dashboard/'
+    elif action == 'activated':
+        title = "✅ Rerun Voting Started"
+        message = (
+            f"Voting for {rerun.position.position_name} rerun is now OPEN!\n"
+            f"🗳️ Please cast your vote before {rerun.end_date.strftime('%B %d, %Y at %I:%M %p')}"
+        )
+        notif_type = Notification.TYPE_SUCCESS
+        url = '/vote/'
+    elif action == 'completed':
+        title = "📊 Rerun Completed"
+        message = (
+            f"The rerun for {rerun.position.position_name} has been completed.\n"
+            f"Results have been finalized. Check the results page."
+        )
+        notif_type = Notification.TYPE_INFO
+        url = '/results/'
+    else:
+        return
+
+    # Send both in-app and web push notifications
+    send_bulk_notifications_with_web_push(
+        students=students,
+        title=title,
+        message=message,
+        notif_type=notif_type,
+        url=url
+    )
+
+
+@staff_member_required(login_url='login')
+def rerun_create(request, election_id):
+    original_election = get_object_or_404(Election, pk=election_id)
+
+    if not original_election.is_closed:
+        messages.error(request, 'Only closed elections can have reruns.')
+        return redirect('admin_elections')
+
+    existing_reruns = RerunElection.objects.filter(
+        original_election=original_election,
+        status__in=[Election.STATUS_ACTIVE, Election.STATUS_INACTIVE]
+    )
+    if existing_reruns.exists():
+        messages.warning(request, 'This election already has active reruns.')
+        return redirect('admin_elections')
+
+    tied_positions = original_election.get_tied_positions()
+
+    if not tied_positions:
+        messages.info(request, 'No tied positions found in this election.')
+        return redirect('admin_elections')
+
+    if request.method == 'POST':
+        position_id = request.POST.get('position')
+        rerun_start = request.POST.get('start_date')
+        rerun_end = request.POST.get('end_date')
+        announcement = request.POST.get('announcement', '')
+
+        if not all([position_id, rerun_start, rerun_end]):
+            messages.error(request, 'Please fill all required fields.')
+            return render(request, 'admin/rerun_create.html', {
+                'election': original_election,
+                'tied_positions': tied_positions,
+                'now': timezone.now(),
+            })
+
+        try:
+            position = get_object_or_404(
+                Position, id=position_id, election=original_election
+            )
+            start_date = timezone.make_aware(
+                datetime.strptime(rerun_start, '%Y-%m-%dT%H:%M')
+            )
+            end_date = timezone.make_aware(
+                datetime.strptime(rerun_end, '%Y-%m-%dT%H:%M')
+            )
+
+            if start_date >= end_date:
+                raise ValidationError('End date must be after start date.')
+
+            if start_date <= timezone.now():
+                raise ValidationError('Start date must be in the future.')
+
+            tied_votes = Vote.objects.filter(
+                position=position,
+                election=original_election
+            ).values('candidate').annotate(
+                count=Count('candidate')
+            ).order_by('-count')
+
+            tied_data = []
+            if len(tied_votes) >= 2:
+                top_vote_count = tied_votes[0]['count']
+                tied_candidates = [
+                    v for v in tied_votes if v['count'] == top_vote_count
+                ]
+
+                for vote_data in tied_candidates:
+                    candidate = Candidate.objects.get(
+                        id=vote_data['candidate']
+                    )
+                    tied_data.append({
+                        'candidate_id': candidate.id,
+                        'candidate_name': candidate.student.get_full_name(),
+                        'votes': vote_data['count'],
+                        'admission_number': candidate.student.admission_number
+                    })
+
+            with transaction.atomic():
+                rerun = RerunElection.objects.create(
+                    original_election=original_election,
+                    position=position,
+                    start_date=start_date,
+                    end_date=end_date,
+                    status=Election.STATUS_INACTIVE,
+                    tied_candidates_data=tied_data,
+                    notification_sent=False
+                )
+
+                original_election.status = Election.STATUS_RERUN
+                original_election.announcement = announcement or (
+                    f'⚡ A rerun for {position.position_name} has been scheduled. '
+                    f'Please vote again on {start_date.strftime("%B %d, %Y at %I:%M %p")}.'
+                )
+                original_election.save()
+
+                original_election.positions.update(is_rerun=False)
+                position.is_rerun = True
+                position.save()
+
+                messages.success(
+                    request,
+                    f'Rerun created for {position.position_name}. '
+                    f'It will start on {start_date.strftime("%B %d, %Y at %I:%M %p")}'
+                )
+
+                send_rerun_notifications(rerun, 'created')
+
+                return redirect('rerun_manage', rerun_id=rerun.id)
+
+        except ValidationError as e:
+            messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, f'Error creating rerun: {str(e)}')
+
+    context = {
+        'election': original_election,
+        'tied_positions': tied_positions,
+        'now': timezone.now(),
+    }
+    return render(request, 'admin/rerun_create.html', context)
+
+
+@staff_member_required(login_url='login')
+def rerun_manage(request, rerun_id):
+    rerun = get_object_or_404(RerunElection, id=rerun_id)
+    original_election = rerun.original_election
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'activate':
+            with transaction.atomic():
+                rerun.status = Election.STATUS_ACTIVE
+                rerun.save()
+                send_rerun_notifications(rerun, 'activated')
+                messages.success(request, 'Rerun has been activated!')
+
+        elif action == 'close':
+            with transaction.atomic():
+                rerun.status = Election.STATUS_CLOSED
+                rerun.completed_at = timezone.now()
+                rerun.save()
+
+                winner = rerun.get_winner()
+
+                if winner:
+                    tied_candidates = rerun.tied_candidates_data
+
+                    TiebreakLog.objects.create(
+                        position=rerun.position,
+                        election=original_election,
+                        tied_candidates=tied_candidates,
+                        winner_candidate_id=winner.id,
+                        winner_name=winner.student.get_full_name(),
+                        method='rerun_election',
+                        notes=f'Resolved via rerun on {timezone.now().strftime("%Y-%m-%d %H:%M")}'
+                    )
+
+                    rerun.position.is_rerun = False
+                    rerun.position.save()
+
+                original_election.status = Election.STATUS_CLOSED
+                original_election.announcement = ''
+                original_election.save()
+
+                send_rerun_notifications(rerun, 'completed')
+                messages.success(
+                    request, 'Rerun completed and results finalized!')
+
+        elif action == 'cancel':
+            with transaction.atomic():
+                rerun.status = Election.STATUS_CLOSED
+                rerun.completed_at = timezone.now()
+                rerun.save()
+
+                original_election.status = Election.STATUS_CLOSED
+                original_election.save()
+
+                rerun.position.is_rerun = False
+                rerun.position.save()
+
+                messages.info(request, 'Rerun has been cancelled.')
+
+        return redirect('rerun_manage', rerun_id=rerun.id)
+
+    votes = RerunVote.objects.filter(rerun_election=rerun)
+    total_votes = votes.count()
+
+    candidate_votes = votes.values('candidate').annotate(
+        count=Count('candidate')
+    ).order_by('-count')
+
+    candidates_data = []
+    for cv in candidate_votes:
+        candidate = Candidate.objects.get(id=cv['candidate'])
+        candidates_data.append({
+            'candidate': candidate,
+            'votes': cv['count'],
+            'percentage': (cv['count'] / total_votes * 100) if total_votes > 0 else 0
+        })
+
+    context = {
+        'rerun': rerun,
+        'original_election': original_election,
+        'candidates': candidates_data,
+        'total_votes': total_votes,
+        'position': rerun.position,
+        'tied_candidates': rerun.tied_candidates_data,
+        'can_activate': rerun.status == Election.STATUS_INACTIVE and timezone.now() >= rerun.start_date,
+        'can_close': rerun.status == Election.STATUS_ACTIVE,
+        'now': timezone.now(),
+    }
+    return render(request, 'admin/rerun_manage.html', context)
+
+
+@staff_member_required(login_url='login')
+def rerun_list(request):
+    reruns = RerunElection.objects.select_related(
+        'original_election', 'position'
+    ).all()
+
+    context = {
+        'reruns': reruns,
+        'active_reruns': reruns.filter(status=Election.STATUS_ACTIVE),
+        'pending_reruns': reruns.filter(status=Election.STATUS_INACTIVE),
+        'completed_reruns': reruns.filter(status=Election.STATUS_CLOSED),
+    }
+    return render(request, 'admin/rerun_list.html', context)
+
+
+@staff_member_required(login_url='login')
+def rerun_auto_check(request):
+    closed_elections = Election.objects.filter(status=Election.STATUS_CLOSED)
+    elections_with_ties = []
+
+    for election in closed_elections:
+        tied_positions = election.get_tied_positions()
+        if tied_positions:
+            elections_with_ties.append({
+                'election': election,
+                'tied_positions': tied_positions,
+                'tie_count': len(tied_positions)
+            })
+
+    context = {
+        'elections_with_ties': elections_with_ties,
+    }
+    return render(request, 'admin/rerun_auto_check.html', context)
+
+
+# ── Service Worker ───────────────────────────────────────────
+
+@cache_control(max_age=86400)
+def service_worker(request):
+    sw_path = os.path.join(settings.BASE_DIR, 'static', 'sw.js')
+    with open(sw_path, 'r') as f:
+        content = f.read()
+    return HttpResponse(content, content_type='application/javascript')
+
+
+# ── Student Rerun Voting View ─────────────────────────────────
+
+@login_required(login_url='login')
+def rerun_ballot(request, rerun_id):
+    rerun = get_object_or_404(
+        RerunElection, id=rerun_id, status=Election.STATUS_ACTIVE
+    )
+
+    now = timezone.now()
+    if not (rerun.start_date <= now <= rerun.end_date):
+        messages.error(request, 'This rerun is not currently active.')
+        return redirect('student_dashboard')
+
+    if RerunVote.objects.filter(student=request.user, rerun_election=rerun).exists():
+        messages.info(request, 'You have already voted in this rerun.')
+        return redirect('student_dashboard')
+
+    candidates = Candidate.objects.filter(
+        position=rerun.position
+    ).select_related('student')
+
+    if request.method == 'POST':
+        candidate_id = request.POST.get('candidate')
+
+        if not candidate_id:
+            messages.error(request, 'Please select a candidate.')
+            return render(request, 'student/rerun_ballot.html', {
+                'rerun': rerun,
+                'candidates': candidates,
+                'position': rerun.position,
+            })
+
+        try:
+            with transaction.atomic():
+                candidate = Candidate.objects.get(
+                    id=candidate_id, position=rerun.position
+                )
+
+                if RerunVote.objects.filter(student=request.user, rerun_election=rerun).exists():
+                    messages.error(
+                        request, 'You have already voted in this rerun.')
+                    return redirect('student_dashboard')
+
+                RerunVote.objects.create(
+                    student=request.user,
+                    candidate=candidate,
+                    rerun_election=rerun
+                )
+
+                messages.success(
+                    request, f'Your vote for {rerun.position.position_name} has been recorded!'
+                )
+
+                create_notification(
+                    student=request.user,
+                    title='Rerun Vote Submitted',
+                    message=f'Your vote for {rerun.position.position_name} has been recorded successfully.',
+                    notif_type=Notification.TYPE_SUCCESS
+                )
+
+                return redirect('student_dashboard')
+
+        except Candidate.DoesNotExist:
+            messages.error(request, 'Invalid candidate selection.')
+        except Exception as e:
+            messages.error(request, f'Error recording your vote: {str(e)}')
+
+    context = {
+        'rerun': rerun,
+        'candidates': candidates,
+        'position': rerun.position,
+        'now': now,
+    }
+    return render(request, 'student/rerun_ballot.html', context)
 
 
 # ═══════════════════════════════════════════════
 # OTP VIEWS
 # ═══════════════════════════════════════════════
 
-
 @staff_member_required(login_url='login')
 def admin_setup_otp(request):
-    """First-time OTP device registration for admin."""
     user = request.user
 
-    # Already has a device — go to verify
     if user_has_device(user):
         return redirect('admin_verify_otp')
 
-    # Create an unconfirmed device — use system name from settings
     from .models import SystemSettings
     sys_settings = SystemSettings.get()
     device_name = f'{sys_settings.system_name} Admin'
@@ -2457,7 +2670,6 @@ def admin_setup_otp(request):
         else:
             messages.error(request, 'Invalid code. Please try again.')
 
-    # Generate QR code for Google Authenticator / Authy
     otp_url = device.config_url
     qr = qrcode.make(otp_url)
     buf = io.BytesIO()
@@ -2465,29 +2677,26 @@ def admin_setup_otp(request):
     qr_b64 = base64.b64encode(buf.getvalue()).decode()
 
     return render(request, 'admin/setup_otp.html', {
-        'device':   device,
-        'qr_b64':   qr_b64,
-        'otp_url':  otp_url,
+        'device': device,
+        'qr_b64': qr_b64,
+        'otp_url': otp_url,
     })
 
 
 @staff_member_required(login_url='login')
 def admin_verify_otp(request):
-    """Per-session OTP verification."""
     if request.user.is_verified():
         return redirect('admin_dashboard')
 
     if request.method == 'POST':
         token = request.POST.get('token', '').strip()
 
-        # Find the user's confirmed device
         device = TOTPDevice.objects.filter(
             user=request.user,
             confirmed=True
         ).first()
 
         if device and device.verify_token(token):
-            # Mark session as OTP-verified
             from django_otp import login as otp_login
             otp_login(request, device)
             messages.success(request, 'Verified. Welcome.')

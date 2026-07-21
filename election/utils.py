@@ -1,6 +1,10 @@
 from django.core.cache import cache
 from django.utils import timezone
 import time
+import requests
+import json
+from django.conf import settings
+from .models import PushSubscription, Notification
 
 
 # ── Cache keys ─────────────────────────────────────────────
@@ -12,6 +16,125 @@ CACHE_RESULTS_PREFIX = 'results_election_'
 CACHE_SHORT = 30    # 30 seconds — live data
 CACHE_MEDIUM = 300   # 5 minutes  — semi-static
 CACHE_LONG = 3600  # 1 hour     — rarely changes
+
+
+def send_web_push_bulk(students, title, body, url='/'):
+    """
+    Send web push notifications to multiple students.
+    Uses VAPID for authentication.
+    """
+    from pywebpush import WebPusher
+
+    if not students:
+        return
+
+    # Get all push subscriptions for these students
+    subscriptions = PushSubscription.objects.filter(
+        student__in=students
+    ).select_related('student')
+
+    if not subscriptions.exists():
+        return
+
+    # Prepare the notification payload
+    payload = json.dumps({
+        'title': title,
+        'body': body,
+        'icon': '/static/img/icon-192.png',
+        'badge': '/static/img/badge-72.png',
+        'url': url,
+        'timestamp': timezone.now().isoformat()
+    })
+
+    sent = 0
+    failed = 0
+
+    # Send to each subscription
+    for sub in subscriptions:
+        try:
+            webpusher = WebPusher({
+                'endpoint': sub.endpoint,
+                'keys': {
+                    'p256dh': sub.p256dh,
+                    'auth': sub.auth
+                }
+            })
+
+            webpusher.send(
+                data=payload,
+                vapid_private_key=settings.VAPID_PRIVATE_KEY,
+                vapid_claims={
+                    'sub': f'mailto:{settings.VAPID_EMAIL}'
+                }
+            )
+            sent += 1
+
+        except Exception as e:
+            failed += 1
+            # If subscription is expired or invalid, delete it
+            error_str = str(e).lower()
+            if 'expired' in error_str or 'invalid' in error_str or 'gone' in error_str:
+                sub.delete()
+
+    return {'sent': sent, 'failed': failed}
+
+
+def send_web_push_to_student(student, title, body, url='/'):
+    """Send web push to a single student"""
+    if not student:
+        return
+
+    subscriptions = PushSubscription.objects.filter(student=student)
+    if not subscriptions.exists():
+        return
+
+    return send_web_push_bulk([student], title, body, url)
+
+
+def send_notification_with_web_push(student, title, message, notif_type='info', url='/'):
+    """
+    Send both in-app notification and web push to a student.
+    This is a convenience function that combines both methods.
+    """
+    # Create in-app notification
+    from .models import Notification
+    notification = Notification.objects.create(
+        student=student,
+        title=title,
+        message=message,
+        notif_type=notif_type,
+        is_admin_notification=False
+    )
+
+    # Send web push
+    send_web_push_to_student(student, title, message, url)
+
+    return notification
+
+
+def send_bulk_notifications_with_web_push(students, title, message, notif_type='info', url='/'):
+    """
+    Send both in-app notifications and web pushes to multiple students.
+    """
+    if not students:
+        return
+
+    # Create in-app notifications
+    notifications = []
+    for student in students:
+        notifications.append(
+            Notification(
+                student=student,
+                title=title,
+                message=message,
+                notif_type=notif_type,
+                is_admin_notification=False
+            )
+        )
+    Notification.objects.bulk_create(notifications)
+
+    # Send web pushes
+    send_web_push_bulk(students, title, message, url)
 
 
 def get_student_stats():

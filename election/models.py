@@ -106,10 +106,10 @@ class Admin(models.Model):
 
 
 class Election(models.Model):
-    STATUS_ACTIVE   = 'active'
+    STATUS_ACTIVE = 'active'
     STATUS_INACTIVE = 'inactive'
-    STATUS_CLOSED   = 'closed'
-    STATUS_RERUN    = 'rerun'   # tie-rerun in progress for selected positions
+    STATUS_CLOSED = 'closed'
+    STATUS_RERUN = 'rerun'   # tie-rerun in progress for selected positions
 
     announcement = models.TextField(
         blank=True, null=True,
@@ -124,11 +124,36 @@ class Election(models.Model):
     ]
 
     election_name = models.CharField(max_length=200)
-    start_date    = models.DateTimeField()
-    end_date      = models.DateTimeField()
-    status        = models.CharField(
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
+    status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default=STATUS_INACTIVE)
-    created_at    = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def get_tied_positions(self):
+        """Get positions that have ties in this election"""
+        if not self.is_closed:
+            return []
+
+        tied_positions = []
+        for position in self.positions.all():
+            # Get vote counts per candidate
+            votes = Vote.objects.filter(
+                position=position,
+                election=self
+            ).values('candidate').annotate(
+                count=Count('candidate')
+            ).order_by('-count')
+
+            vote_counts = list(votes)
+            if len(vote_counts) >= 2 and vote_counts[0]['count'] == vote_counts[1]['count']:
+                tied_positions.append(position)
+
+        return tied_positions
+
+    def has_ties(self):
+        """Check if election has any tied positions"""
+        return len(self.get_tied_positions()) > 0
 
     class Meta:
         db_table = 'elections'
@@ -163,10 +188,10 @@ class Position(models.Model):
         Election, on_delete=models.CASCADE, related_name='positions')
 
     position_name = models.CharField(max_length=100)
-    max_votes     = models.PositiveIntegerField(default=1)
+    max_votes = models.PositiveIntegerField(default=1)
     # True when this position has been flagged for a re-run due to a tie
-    is_rerun      = models.BooleanField(default=False)
-    created_at    = models.DateTimeField(default=timezone.now)
+    is_rerun = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = 'positions'
@@ -311,26 +336,26 @@ class SystemSettings(models.Model):
     """Single-row settings table for the institution."""
 
     # ── Identity ──────────────────────────────────────────
-    system_name      = models.CharField(max_length=100, default='KuraVote')
+    system_name = models.CharField(max_length=100, default='KuraVote')
     institution_name = models.CharField(max_length=200, default='')
 
     # ── Security ──────────────────────────────────────────
-    two_fa_enabled   = models.BooleanField(default=True)
+    two_fa_enabled = models.BooleanField(default=True)
 
     # ── Appearance / Theme ────────────────────────────────
     # theme: 'green' | 'blue' | 'purple' | 'dark' | 'custom'
-    theme            = models.CharField(max_length=20, default='green')
+    theme = models.CharField(max_length=20, default='green')
     # font_family: 'dmsans' | 'inter' | 'poppins' | 'roboto' | 'system'
-    font_family      = models.CharField(max_length=20, default='dmsans')
+    font_family = models.CharField(max_length=20, default='dmsans')
     # font sizes for admin and student panels
-    admin_font_size   = models.CharField(max_length=5, default='md')
+    admin_font_size = models.CharField(max_length=5, default='md')
     student_font_size = models.CharField(max_length=5, default='md')
     # custom theme colours (used when theme='custom')
-    primary_color    = models.CharField(max_length=7, default='#16a34a')
-    sidebar_color    = models.CharField(max_length=7, default='#14532d')
-    accent_color     = models.CharField(max_length=7, default='#eab308')
+    primary_color = models.CharField(max_length=7, default='#16a34a')
+    sidebar_color = models.CharField(max_length=7, default='#14532d')
+    accent_color = models.CharField(max_length=7, default='#eab308')
     # extra CSS injected into every page (power-user customisation)
-    custom_css       = models.TextField(blank=True, default='')
+    custom_css = models.TextField(blank=True, default='')
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -369,16 +394,98 @@ class TiebreakLog(models.Model):
     def __str__(self):
         return f'Tiebreak: {self.position} → {self.winner_name}'
 
+# Add this after TiebreakLog model
+
+
+class RerunElection(models.Model):
+    """Represents a rerun election for tied positions"""
+    original_election = models.ForeignKey(
+        Election,
+        on_delete=models.CASCADE,
+        related_name='reruns'
+    )
+    position = models.ForeignKey(
+        Position,
+        on_delete=models.CASCADE,
+        related_name='reruns'
+    )
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
+    status = models.CharField(
+        max_length=10,
+        choices=Election.STATUS_CHOICES,
+        default=Election.STATUS_INACTIVE
+    )
+    tied_candidates_data = models.JSONField(
+        help_text='Data of tied candidates from original election'
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'rerun_elections'
+        verbose_name = 'Rerun Election'
+        verbose_name_plural = 'Rerun Elections'
+        ordering = ['-created_at']
+
+    @property
+    def is_active(self):
+        return self.status == Election.STATUS_ACTIVE
+
+    @property
+    def is_closed(self):
+        return self.status == Election.STATUS_CLOSED
+
+    @property
+    def total_votes(self):
+        return Vote.objects.filter(
+            election=self.original_election,
+            position=self.position,
+            voted_at__gte=self.start_date,
+            voted_at__lte=self.end_date
+        ).count()
+
+    def __str__(self):
+        return f"Rerun for {self.position.position_name} - {self.original_election.election_name}"
+
+
+class RerunVote(models.Model):
+    """Tracks votes specifically for rerun elections"""
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE, related_name='rerun_votes'
+    )
+    candidate = models.ForeignKey(
+        Candidate, on_delete=models.CASCADE, related_name='rerun_votes'
+    )
+    rerun_election = models.ForeignKey(
+        RerunElection, on_delete=models.CASCADE, related_name='votes'
+    )
+    voted_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'rerun_votes'
+        verbose_name = 'Rerun Vote'
+        verbose_name_plural = 'Rerun Votes'
+        unique_together = ('student', 'rerun_election')
+        indexes = [
+            models.Index(fields=['rerun_election', 'student']),
+            models.Index(fields=['rerun_election', 'candidate']),
+        ]
+
+    def __str__(self):
+        return f"{self.student.get_full_name()} voted in rerun for {self.rerun_election.position.position_name}"
+
 
 class PushSubscription(models.Model):
     """Stores a browser Web Push subscription endpoint per student."""
-    student   = models.ForeignKey(
+    student = models.ForeignKey(
         Student, on_delete=models.CASCADE,
         related_name='push_subscriptions'
     )
-    endpoint  = models.TextField(unique=True)
-    p256dh    = models.TextField()   # browser public key
-    auth      = models.TextField()   # auth secret
+    # Changed to CharField with max_length
+    endpoint = models.CharField(max_length=500, unique=True)
+    p256dh = models.TextField()   # browser public key
+    auth = models.TextField()     # auth secret
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

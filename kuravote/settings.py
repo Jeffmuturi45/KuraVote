@@ -2,6 +2,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 import dj_database_url
+from django.core.management.utils import get_random_secret_key
 
 load_dotenv()
 
@@ -88,6 +89,13 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 30,  # Increased timeout
+            'isolation_level': 'IMMEDIATE',
+            'init_command': "PRAGMA synchronous = OFF; PRAGMA journal_mode = WAL;",
+        },
+        'CONN_MAX_AGE': 600,
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
@@ -101,8 +109,8 @@ if os.environ.get('DATABASE_URL'):
         )
     }
 else:
-#     # Connection pooling — reuse DB connections instead of
-#     # creating a new one per request
+    #     # Connection pooling — reuse DB connections instead of
+    #     # creating a new one per request
     DATABASES = {
         'default': {
             'ENGINE':   'django.db.backends.mysql',
@@ -238,6 +246,23 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'null': {
+            'class': 'logging.NullHandler',
+        },
+    },
+    'loggers': {
+        'django.db.backends': {
+            'handlers': ['null'],
+            'propagate': False,
+            'level': 'ERROR',
+        },
+    },
+}
+
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
@@ -252,9 +277,25 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'kuravote-cache',
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+            'CULL_FREQUENCY': 3,
+        }
     }
 }
 
+
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
+VAPID_EMAIL = os.environ.get('VAPID_EMAIL')
+
+# For development only - generate temporary keys if missing
+if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+    from pywebpush import generate_vapid_keys
+    keys = generate_vapid_keys()
+    VAPID_PRIVATE_KEY = keys['private']
+    VAPID_PUBLIC_KEY = keys['public']
+    print(f" Generated temporary VAPID keys. Set them in environment for production.")
 
 # File upload limits — increase for large CSVs
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20971520   # 20MB

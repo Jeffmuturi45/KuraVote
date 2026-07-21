@@ -20,6 +20,7 @@ from django.urls import path, include
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import admin
 from django.views.static import serve as static_serve
+from django.views.generic import TemplateView
 import os
 admin.site.login_template = 'admin/login.html'
 
@@ -38,7 +39,7 @@ def service_worker(request):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('sw.js', service_worker, name='service_worker'),
+
     path('', include('election.urls')),
 ]
 

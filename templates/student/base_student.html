@@ -145,6 +145,133 @@
 
 </div>
 
+<!-- CSRF Token for AJAX -->
+{% csrf_token %}
+
+<script>
+// Register Service Worker and handle push notifications
+(function() {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        // Get CSRF token from cookie
+        function getCSRFToken() {
+            const name = 'csrftoken';
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Check if user is logged in
+        const isAuthenticated = document.querySelector('body').dataset.userAuthenticated === 'true';
+        if (!isAuthenticated) return;
+
+        // Get VAPID public key from server
+        fetch('/push-vapid-public-key/')
+            .then(response => response.json())
+            .then(data => {
+                const publicKey = data.publicKey;
+                if (!publicKey) {
+                    console.log('No VAPID public key available');
+                    return;
+                }
+
+                // Register service worker
+                return navigator.serviceWorker.register('/static/sw.js', { scope: '/' })
+                    .then(registration => {
+                        console.log('Service Worker registered');
+                        
+                        // Check if already subscribed
+                        return registration.pushManager.getSubscription()
+                            .then(subscription => {
+                                if (subscription) {
+                                    return subscription;
+                                }
+                                
+                                // Subscribe for push notifications
+                                return registration.pushManager.subscribe({
+                                    userVisibleOnly: true,
+                                    applicationServerKey: publicKey
+                                });
+                            });
+                    })
+                    .then(subscription => {
+                        if (subscription) {
+                            // Send subscription to server
+                            return fetch('/push-subscribe/', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': getCSRFToken()
+                                },
+                                body: JSON.stringify({
+                                    endpoint: subscription.endpoint,
+                                    keys: {
+                                        p256dh: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('p256dh')))),
+                                        auth: btoa(String.fromCharCode.apply(null, new Uint8Array(subscription.getKey('auth'))))
+                                    }
+                                })
+                            });
+                        }
+                    })
+                    .then(response => {
+                        if (response && response.ok) {
+                            console.log('Push subscription saved successfully');
+                        }
+                    })
+                    .catch(err => {
+                        console.log('Push notification setup error:', err);
+                    });
+            })
+            .catch(err => {
+                console.log('Error getting VAPID key:', err);
+            });
+    }
+})();
+
+// Show notification permission prompt
+document.addEventListener('DOMContentLoaded', function() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        // Show a subtle prompt after user interaction
+        const notificationPrompt = document.getElementById('notification-prompt');
+        if (notificationPrompt) {
+            notificationPrompt.style.display = 'block';
+        }
+    }
+});
+
+// Handle notification button click
+function enableNotifications() {
+    Notification.requestPermission().then(function(permission) {
+        if (permission === 'granted') {
+            document.getElementById('notification-prompt').style.display = 'none';
+            // Reload to register push
+            location.reload();
+        }
+    });
+}
+</script>
+
+<!-- Notification Permission Prompt -->
+<div id="notification-prompt" class="notification-prompt" style="display: none; position: fixed; bottom: 20px; right: 20px; z-index: 9999; max-width: 350px;">
+    <div class="card shadow-lg border-0">
+        <div class="card-body">
+            <h6 class="card-title"><i class="fas fa-bell"></i> Enable Notifications</h6>
+            <p class="card-text small">Get real-time alerts about elections and reruns.</p>
+            <button onclick="enableNotifications()" class="btn btn-primary btn-sm w-100">
+                <i class="fas fa-check me-2"></i>Enable Notifications
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- ══ Notification JS ═══════════════════════════════════ -->
 <script>
 const NOTIF_API_URL        = "{% url 'notifications_api' %}";

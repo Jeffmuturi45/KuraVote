@@ -1,0 +1,169 @@
+{% extends "admin/base_admin.html" %}
+{% load static %}
+
+{% block title %}Manage Rerun{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">🔄 Manage Rerun</h4>
+                        <p class="text-muted mb-0">
+                            {{ position.position_name }} - {{ original_election.election_name }}
+                        </p>
+                    </div>
+                    <div>
+                        <span class="badge {% if rerun.status == 'active' %}bg-success{% elif rerun.status == 'inactive' %}bg-warning{% else %}bg-secondary{% endif %} p-2">
+                            Status: {{ rerun.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Timer -->
+                    <div class="alert alert-info">
+                        <strong>📅 Schedule:</strong>
+                        {% if rerun.status == 'inactive' %}
+                            Voting starts on {{ rerun.start_date|date:"F j, Y" }} at {{ rerun.start_date|date:"g:i A" }}
+                            <div class="mt-2">
+                                <div id="countdown"></div>
+                            </div>
+                        {% elif rerun.status == 'active' %}
+                            Voting ends on {{ rerun.end_date|date:"F j, Y" }} at {{ rerun.end_date|date:"g:i A" }}
+                            <div class="mt-2">
+                                <div id="countdown"></div>
+                            </div>
+                        {% else %}
+                            Completed on {{ rerun.completed_at|date:"F j, Y" }} at {{ rerun.completed_at|date:"g:i A" }}
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Tied Candidates Info -->
+                    <div class="alert alert-warning">
+                        <strong>⚖️ Tied Candidates:</strong>
+                        <ul>
+                            {% for tc in tied_candidates %}
+                                <li>
+                                    {{ tc.candidate_name }} (Admission: {{ tc.admission_number }}) - {{ tc.votes }} votes
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    
+                    <!-- Results -->
+                    <h5 class="mt-4">📊 Rerun Results</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Candidate</th>
+                                    <th>Votes</th>
+                                    <th>Percentage</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for data in candidates %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ data.candidate.student.get_full_name }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                Admission: {{ data.candidate.student.admission_number }}
+                                            </small>
+                                        </td>
+                                        <td>{{ data.votes }}</td>
+                                        <td>
+                                            <div class="progress">
+                                                <div class="progress-bar" role="progressbar" 
+                                                     style="width: {{ data.percentage }}%">
+                                                    {{ data.percentage|floatformat:1 }}%
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            {% if forloop.first and rerun.status == 'closed' %}
+                                                <span class="badge bg-success">🏆 Winner</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="4" class="text-center">No votes cast yet</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="mt-4">
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            {% if rerun.status == 'inactive' and can_activate %}
+                                <button type="submit" name="action" value="activate" class="btn btn-success">
+                                    <i class="fas fa-play me-2"></i>Activate Rerun
+                                </button>
+                            {% endif %}
+                            
+                            {% if rerun.status == 'active' %}
+                                <button type="submit" name="action" value="close" class="btn btn-primary">
+                                    <i class="fas fa-check me-2"></i>Close Rerun
+                                </button>
+                            {% endif %}
+                            
+                            {% if rerun.status == 'inactive' or rerun.status == 'active' %}
+                                <button type="submit" name="action" value="cancel" class="btn btn-danger" 
+                                        onclick="return confirm('Are you sure you want to cancel this rerun?')">
+                                    <i class="fas fa-times me-2"></i>Cancel Rerun
+                                </button>
+                            {% endif %}
+                        </form>
+                        
+                        <a href="{% url 'rerun_list' %}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Reruns
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Countdown timer
+function updateCountdown() {
+    const now = new Date().getTime();
+    {% if rerun.status == 'inactive' %}
+        const target = new Date('{{ rerun.start_date|date:"Y-m-d H:i:s" }}').getTime();
+        const label = 'Voting starts in';
+    {% elif rerun.status == 'active' %}
+        const target = new Date('{{ rerun.end_date|date:"Y-m-d H:i:s" }}').getTime();
+        const label = 'Voting ends in';
+    {% else %}
+        return;
+    {% endif %}
+    
+    const diff = target - now;
+    
+    if (diff <= 0) {
+        document.getElementById('countdown').innerHTML = 'Event has started/ended!';
+        return;
+    }
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    document.getElementById('countdown').innerHTML = 
+        `${label}: ${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
+// Update countdown every second
+setInterval(updateCountdown, 1000);
+updateCountdown();
+</script>
+{% endblock %}
